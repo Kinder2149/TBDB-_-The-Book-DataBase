@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+android/app/src/main/assets/public/
+android/build/
+android/app/build/
+android/.gradle/
+android/signature.properties
+android/local.properties

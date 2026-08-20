@@ -1,0 +1,32 @@
+# Secrets — ne doivent JAMAIS entrer dans le dépôt.
+# La clé Google Books vit dans client/.env, et se retrouve EN CLAIR dans tout
+# ce qui est construit à partir de lui : dist/, les assets Android, l'AAB.
+# D'où l'exclusion des fichiers construits autant que de la source du secret.
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+signature.properties
+
+# Dépendances et produits de construction
+node_modules/
+dist/
+build/
+.gradle/
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+
+# Bundle web recopié dans le projet Android par `cap sync` — contient la clé.
+android/app/src/main/assets/public/
+
+# Bases de données locales et fichiers de travail
+*.sqlite
+*.db
+*.log
+
+# Systèmes
+.DS_Store
+Thumbs.db

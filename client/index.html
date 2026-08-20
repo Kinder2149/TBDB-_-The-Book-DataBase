@@ -1,0 +1,24 @@
+<!doctype html>
+<!--
+  index.html — point d'entrée Vite.
+  Applique §6 : viewport-fit=cover pour que env(safe-area-inset-*) fonctionne
+  sous les encoches Android. Deux <meta theme-color> conditionnées par
+  prefers-color-scheme, comme le projet séries.
+  Piège évité : aucune police web n'est chargée (piles système uniquement) —
+  zéro requête bloquante, zéro flash de police.
+-->
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#F6F2E9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0E0F14" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>Suivi Lecture</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,860 @@
+/*
+ * styles.css — TOUT le CSS de l'application, écrit à la main, nommage BEM.
+ * Applique §1 (aucune librairie CSS) et §9 : les tokens sont déclarés en TROIS
+ * blocs — défaut clair, préférence système, choix explicite — sinon le thème
+ * choisi ne peut pas gagner contre la préférence de l'appareil.
+ * Les 4 couleurs de statut sont sémantiques et DISTINCTES de l'accent, pour
+ * qu'un statut ne soit jamais confondu avec une sélection.
+ * Piège évité : env(safe-area-inset-*) sur appbar et tabbar, sans quoi elles
+ * passent sous l'encoche et sous la barre de gestes Android.
+ */
+
+/* --- Tokens : 1. défaut clair ------------------------------------------- */
+:root {
+  --ground: #F6F2E9;
+  --surface: #FFFFFF;
+  --surface2: #EDE6D9;
+  --border: #E2D9C7;
+  --text: #201D17;
+  --muted: #6B6455;
+  --faint: #7A7365;
+
+  --accent: #A8462A;
+  --accent-strong: #8A3720;
+  --accent-soft: #F3E3DA;
+
+  --alire: #3E6FD0;
+  --encours: #8B54D6;
+  --lu: #2E9E6B;
+  --abandon: #8B8F98;
+  --danger: #C0453B;
+
+  --shadow: 0 10px 30px rgba(60, 40, 20, .10);
+  --radius: 14px;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+
+/* --- Tokens : 2. préférence système -------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0E0F14;
+    --surface: #171922;
+    --surface2: #1F2230;
+    --border: #2B3040;
+    --text: #ECEAE4;
+    --muted: #949BAA;
+    --faint: #7A8294;
+
+    --accent: #E0724F;
+    --accent-strong: #E0724F;
+    --accent-soft: #3A2018;
+
+    --alire: #5B8DEF;
+    --encours: #B57BEE;
+    --lu: #46C68C;
+    --abandon: #7C8496;
+    --danger: #E86A5E;
+
+    --shadow: 0 14px 40px rgba(0, 0, 0, .55);
+    color-scheme: dark;
+  }
+}
+
+/* --- Tokens : 3. choix explicite (doit gagner sur les deux précédents) ---- */
+:root[data-theme="light"] {
+  --ground: #F6F2E9; --surface: #FFFFFF; --surface2: #EDE6D9; --border: #E2D9C7;
+  --text: #201D17; --muted: #6B6455; --faint: #7A7365;
+  --accent: #A8462A; --accent-strong: #8A3720; --accent-soft: #F3E3DA;
+  --alire: #3E6FD0; --encours: #8B54D6; --lu: #2E9E6B; --abandon: #8B8F98;
+  --danger: #C0453B;
+  --shadow: 0 10px 30px rgba(60, 40, 20, .10);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --ground: #0E0F14; --surface: #171922; --surface2: #1F2230; --border: #2B3040;
+  --text: #ECEAE4; --muted: #949BAA; --faint: #7A8294;
+  --accent: #E0724F; --accent-strong: #E0724F; --accent-soft: #3A2018;
+  --alire: #5B8DEF; --encours: #B57BEE; --lu: #46C68C; --abandon: #7C8496;
+  --danger: #E86A5E;
+  --shadow: 0 14px 40px rgba(0, 0, 0, .55);
+  color-scheme: dark;
+}
+
+/* --- Base ----------------------------------------------------------------- */
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+/*
+ * Une application, pas une page web : le texte ne se selectionne pas au doigt.
+ * Sans cette regle, l'appui long ouvrait NOTRE menu de statut ET le menu de
+ * selection d'Android (Traduire / Copier / Partager), qui surlignait le texte
+ * sous le doigt — constate sur appareil.
+ * Les exceptions sont explicites : ce qu'on veut vraiment pouvoir copier.
+ */
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea,
+.fiche__resume,
+.identite__cle {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; }
+
+button { font: inherit; color: inherit; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* --- Couleurs de statut : une variable locale, consommée par les enfants --- */
+.status--a_lire { --sc: var(--alire); }
+.status--en_cours { --sc: var(--encours); }
+.status--lu { --sc: var(--lu); }
+.status--abandonne { --sc: var(--abandon); }
+
+/* --- Charpente ------------------------------------------------------------ */
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+  padding: calc(env(safe-area-inset-top) + .7rem) 1rem .7rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.appbar__marque { font-family: var(--serif); font-size: 1.1rem; }
+
+.appbar__profil {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: .3rem .7rem;
+}
+
+.content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1rem 1rem calc(env(safe-area-inset-bottom) + 5.5rem);
+}
+
+.tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tabbar__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .2rem;
+  min-height: 52px;
+  padding: .5rem .2rem;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: .68rem;
+  cursor: pointer;
+}
+
+.tabbar__item.is-active { color: var(--accent); }
+
+/* --- Boutons -------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  min-height: 40px;
+  padding: .5rem .9rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface2);
+  cursor: pointer;
+}
+
+.btn:disabled { opacity: .55; cursor: default; }
+.btn--primaire { background: var(--accent); border-color: var(--accent); color: #FFF; }
+.btn--fantome { background: none; }
+.btn--danger { background: var(--danger); border-color: var(--danger); color: #FFF; }
+.btn--large { width: 100%; }
+.btn--icone { min-width: 40px; padding: .4rem; }
+
+/* --- Cartes de réglages --------------------------------------------------- */
+.reglages { display: grid; gap: 1rem; }
+
+.carte {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+}
+
+.carte__titre { font-size: 1.02rem; margin-bottom: .7rem; }
+
+.carte__ligne {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .45rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: .9rem;
+}
+
+.carte__ligne:last-of-type { border-bottom: 0; }
+
+.carte__detail {
+  margin: .6rem 0;
+  font-size: .78rem;
+  color: var(--faint);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* --- Overlays et modales -------------------------------------------------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, .5);
+}
+
+.sheet {
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 1rem 1rem calc(env(safe-area-inset-bottom) + 1rem);
+}
+
+.sheet--danger { border-top: 3px solid var(--danger); }
+
+.sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .8rem;
+}
+
+.sheet__titre { font-size: 1.1rem; }
+.sheet__corps { display: grid; gap: .8rem; }
+.sheet__actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.2rem; }
+
+@media (min-width: 700px) {
+  .overlay { align-items: center; justify-content: center; padding: 1.5rem; }
+  .sheet { max-width: 560px; border-radius: var(--radius); }
+}
+
+/* --- Sondes de transport (tranche 0) -------------------------------------- */
+.sonde { border: 1px solid var(--border); border-radius: var(--radius); padding: .7rem .8rem; }
+.sonde__tete { display: flex; align-items: center; gap: .5rem; }
+.sonde__ms { margin-left: auto; font-size: .72rem; color: var(--faint); }
+.sonde__detail { margin: .4rem 0 0; font-size: .78rem; color: var(--muted); word-break: break-word; }
+
+/* --- Textes d'état -------------------------------------------------------- */
+/* Ils disent QUOI FAIRE ensuite, jamais seulement que c'est vide (§9). */
+.hint { color: var(--muted); font-size: .88rem; line-height: 1.6; }
+.error { color: var(--danger); font-size: .88rem; }
+
+/* --- Toasts --------------------------------------------------------------- */
+.toasts {
+  position: fixed;
+  left: 0; right: 0;
+  bottom: calc(env(safe-area-inset-bottom) + 4.6rem);
+  z-index: 50;
+  display: grid;
+  gap: .5rem;
+  padding: 0 1rem;
+  pointer-events: none;
+}
+
+.toast {
+  margin: 0 auto;
+  max-width: 520px;
+  width: 100%;
+  padding: .7rem .9rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  box-shadow: var(--shadow);
+  font-size: .85rem;
+}
+
+.toast--info { border-left-color: var(--accent); }
+
+/* --- Écran de secours ----------------------------------------------------- */
+.ecran-casse {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 3rem 1.2rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.ecran-casse__titre { font-size: 1.35rem; }
+
+.ecran-casse__detail {
+  font-size: .75rem;
+  color: var(--faint);
+  background: var(--surface2);
+  border-radius: var(--radius);
+  padding: .7rem;
+  word-break: break-word;
+}
+
+/* --- Écran Recherche (tranche 1) ------------------------------------------ */
+.recherche { display: grid; gap: 1rem; }
+.recherche__barre { display: grid; gap: .7rem; }
+
+.champ {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: 0 .7rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.champ__icone { color: var(--muted); flex: none; }
+
+.champ__saisie {
+  flex: 1;
+  min-width: 0;
+  padding: .8rem 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.champ__saisie::-webkit-search-cancel-button { display: none; }
+
+.champ__vider {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface2);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* Sélecteur segmenté Titre | Auteur | ISBN */
+/* Colonnes deduites du nombre d'entrees : le selecteur sert a 3 modes de
+   recherche ET a 4 formats. Fige a 3, il debordait sur deux lignes. */
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: .3rem;
+  padding: .25rem;
+  background: var(--surface2);
+  border-radius: 999px;
+}
+
+.seg__item {
+  padding: .5rem .4rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: .82rem;
+  cursor: pointer;
+}
+
+.seg__item.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+/* Grille : 3 colonnes fixes sur téléphone — 9 livres par écran au lieu de 2. */
+.grille {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .8rem;
+}
+
+@media (min-width: 560px) {
+  .grille { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+
+/* La carte est un CONTENEUR depuis les corrections d'usage : elle porte une
+   zone cliquable (ouvrir la fiche) ET un bouton d'ajout rapide superpose.
+   Un bouton dans un bouton est invalide en HTML — d'ou la separation. */
+.carte-livre { position: relative; display: grid; }
+
+.carte-livre__zone {
+  display: grid;
+  gap: .35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  /* Sans ceci, un appui long sur Android declenche la selection de texte du
+     systeme au lieu de notre menu de statut. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: pan-y;
+}
+
+.carte-livre__ajout {
+  position: absolute;
+  top: .3rem;
+  left: .3rem;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #FFF;
+  cursor: pointer;
+  /* Un lisere de la couleur de fond plutot qu'une ombre portee : le bouton se
+     detache sur n'importe quelle couverture sans l'assombrir. */
+  box-shadow: 0 0 0 2px var(--ground);
+}
+
+.carte-livre__ajout:disabled { opacity: .6; }
+
+.chip--nouveau { border-style: dashed; }
+.profil__actions { display: flex; gap: .4rem; }
+
+.carte-livre__couverture {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.carte-livre__couverture img { width: 100%; height: 100%; object-fit: cover; }
+
+.carte-livre__sans-image {
+  padding: .5rem;
+  color: var(--faint);
+  font-size: .68rem;
+  text-align: center;
+}
+
+.carte-livre__titre {
+  font-family: var(--sans);
+  font-size: .78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.carte-livre__meta {
+  margin: 0;
+  font-size: .68rem;
+  color: var(--faint);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* --- Fiche d'un résultat (modale) ----------------------------------------- */
+.fiche__sous-titre { margin: 0; color: var(--muted); font-style: italic; font-size: .88rem; }
+.fiche__lignes { display: grid; }
+
+.fiche__ligne {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: .85rem;
+}
+
+.fiche__ligne:last-child { border-bottom: 0; }
+.fiche__ligne span { color: var(--muted); }
+.fiche__ligne b { text-align: right; }
+
+/* Pas de max-height : la feuille (.sheet) defile deja. Une zone de defilement
+   imbriquee coupait le resume en plein mot, sans rien qui indique qu'il
+   continue — constate sur appareil. */
+.fiche__resume {
+  margin: 0;
+  font-size: .85rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+/* Bloc d'identité : la preuve visuelle de la tranche 1. */
+.identite {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--abandon);
+  border-radius: var(--radius);
+  padding: .7rem .8rem;
+  background: var(--surface2);
+}
+
+.identite--ok { border-left-color: var(--lu); }
+.identite__tete { display: flex; align-items: center; gap: .5rem; }
+
+.identite__cle {
+  margin: .4rem 0 .2rem;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: .82rem;
+  color: var(--accent-strong);
+  word-break: break-all;
+}
+
+.identite__detail { margin: .25rem 0 0; font-size: .76rem; color: var(--muted); line-height: 1.5; }
+
+/* --- Bibliothèque (tranche 2) --------------------------------------------- */
+.biblio { display: grid; gap: 1rem; }
+
+.biblio__statuts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: .6rem;
+}
+
+.pave {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: .5rem;
+  padding: .8rem .9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+}
+
+.pave.is-active { border-color: var(--sc); background: var(--surface2); }
+.pave__pastille { width: 10px; height: 10px; border-radius: 50%; background: var(--sc); }
+.pave__libelle { font-size: .85rem; }
+.pave__compte { font-size: 1.05rem; font-weight: 600; font-family: var(--serif); }
+
+.soustitre {
+  font-size: 1.02rem;
+  margin-top: .5rem;
+  padding-top: .8rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Liseré de statut en bas de couverture, et marque « déjà suivi ». */
+.carte-livre__lisere {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 4px;
+  background: var(--sc);
+}
+
+.carte-livre__marque {
+  position: absolute;
+  top: .3rem; right: .3rem;
+  display: grid;
+  place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--lu);
+  color: #FFF;
+}
+
+/* --- Sélecteur de statut (appui long) ------------------------------------- */
+.statuts { display: grid; gap: .5rem; }
+
+.statbtn {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .75rem .9rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+}
+
+.statbtn.is-active { border-color: var(--sc); }
+.statbtn__led { width: 10px; height: 10px; border-radius: 50%; background: var(--sc); flex: none; }
+
+/* --- Fiche détail (tranche 4) --------------------------------------------- */
+.fiche__entete { display: grid; grid-template-columns: 96px 1fr; gap: .9rem; align-items: start; }
+
+.fiche__couverture {
+  aspect-ratio: 2 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.fiche__couverture img { width: 100%; height: 100%; object-fit: cover; }
+.fiche__resume-tete { display: grid; gap: .25rem; align-content: start; }
+.fiche__auteurs { margin: 0; font-size: .92rem; font-weight: 600; }
+.fiche__annee { margin: 0; font-size: .82rem; color: var(--muted); }
+
+.fiche__cycle {
+  margin: .2rem 0 0;
+  font-size: .76rem;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: .2rem .6rem;
+  justify-self: start;
+}
+
+.soustitre--serre { margin-top: 0; padding-top: 0; border-top: 0; font-size: .95rem; }
+
+/* --- Éditions -------------------------------------------------------------- */
+.editions { display: grid; gap: .5rem; }
+.editions__tete { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+
+.edition {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface2);
+}
+
+.edition--active { border-color: var(--lu); }
+
+.edition__choix {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: .5rem;
+  width: 100%;
+  padding: .7rem .8rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.edition__marque { display: grid; place-items: center; color: var(--lu); }
+.edition__texte { display: grid; gap: .15rem; min-width: 0; }
+.edition__texte b { font-size: .85rem; line-height: 1.3; }
+.edition__meta { font-size: .74rem; color: var(--muted); }
+.edition__isbn { font-size: .7rem; color: var(--faint); font-family: ui-monospace, Consolas, monospace; }
+
+.edition__actions {
+  display: flex;
+  gap: .4rem;
+  justify-content: flex-end;
+  padding: 0 .6rem .6rem;
+}
+
+.btn--mini { min-height: 30px; padding: .25rem .7rem; font-size: .76rem; }
+
+/* --- Cycle ---------------------------------------------------------------- */
+.cycle { display: grid; gap: .5rem; }
+.cycle__saisie { display: grid; grid-template-columns: 1fr 80px auto; gap: .4rem; align-items: center; }
+
+.champ__saisie--encadre {
+  padding: .6rem .7rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.champ__saisie--court { text-align: center; }
+
+/* --- Lignes de résultat dans les sous-modales ------------------------------ */
+.ligne-resultat {
+  display: grid;
+  gap: .2rem;
+  width: 100%;
+  padding: .7rem .8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ligne-resultat b { font-size: .85rem; line-height: 1.3; }
+.ligne-resultat span { font-size: .74rem; color: var(--muted); }
+
+/* Sélecteur de statut en ligne dans la fiche : 2 colonnes plutôt que 4, pour
+   que les libellés restent lisibles sur téléphone. */
+.statuts--ligne { grid-template-columns: 1fr 1fr; }
+
+/* --- Progression (tranche 5) ---------------------------------------------- */
+.progression-bloc { display: grid; gap: .6rem; }
+.jauge { display: grid; gap: .3rem; }
+
+.jauge__piste {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.jauge--compacte .jauge__piste { height: 6px; }
+
+.jauge__remplissage {
+  display: block;
+  height: 100%;
+  background: var(--encours);
+  border-radius: 999px;
+  transition: width .25s ease;
+}
+
+.jauge__legende {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: .74rem;
+  color: var(--muted);
+}
+
+.cycle__unite { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+
+/* --- Ma lecture ------------------------------------------------------------ */
+.lecture { display: grid; gap: .8rem; }
+.reprises { display: grid; gap: .8rem; }
+
+.reprise {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: .8rem;
+  padding: .8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.reprise__couverture {
+  aspect-ratio: 2 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+  cursor: pointer;
+}
+
+.reprise__couverture img { width: 100%; height: 100%; object-fit: cover; }
+.reprise__corps { display: grid; gap: .4rem; align-content: start; min-width: 0; }
+
+.reprise__titre {
+  font-family: var(--sans);
+  font-size: .88rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.reprise__auteur { margin: 0; font-size: .74rem; color: var(--faint); }
+
+/* --- Listes et suggestions (tranche 6) ------------------------------------ */
+.listes { display: grid; gap: .6rem; }
+.listes__puces { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .4rem .8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface2);
+  font-size: .8rem;
+  cursor: pointer;
+}
+
+.chip.on { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+.chip__compte { font-size: .72rem; color: var(--faint); }
+.chip.on .chip__compte { color: var(--accent-strong); }
+
+.liste-ouverte { display: grid; gap: .6rem; }
+
+.suggestions { display: grid; gap: .8rem; }
+
+.suggestions__tete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* max-height en plus du line-clamp : le clamp seul laissait la troisieme
+   ligne deborder sous la carte sur Android. La hauteur explicite garantit la
+   coupe quel que soit le support du clamp. */
+.carte-livre__raison {
+  margin: 0;
+  font-size: .66rem;
+  line-height: 1.3;
+  max-height: 2.6em;
+  color: var(--accent-strong);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* --- Bouton de scan (tranche 7) ------------------------------------------- */
+.champ__scan {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-left: .1rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  cursor: pointer;
+}

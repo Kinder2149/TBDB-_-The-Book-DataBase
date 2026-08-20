@@ -1,0 +1,13 @@
+{
+  "appId": "com.kinder.suivilecture",
+  "appName": "Suivi Lecture",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

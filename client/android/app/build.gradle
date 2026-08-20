@@ -1,0 +1,103 @@
+apply plugin: 'com.android.application'
+
+/*
+ * Signature de publication, BRANCHEE CONDITIONNELLEMENT.
+ * Motif repris tel quel du projet series, ou il a fait ses preuves : si le
+ * fichier signature.properties existe, le bloc de signature est cree ; sinon
+ * seule la version debug se construit.
+ * C'est ce qui permet de developper sans cle ET de ne jamais mettre un secret
+ * dans le depot. signature.properties est git-ignore ; signature.properties.exemple
+ * documente sa forme.
+ */
+def fichierSignature = rootProject.file('signature.properties')
+def signatureDisponible = fichierSignature.exists()
+def proprietesSignature = new Properties()
+if (signatureDisponible) {
+    fichierSignature.withInputStream { proprietesSignature.load(it) }
+}
+
+android {
+    namespace = "com.kinder.suivilecture"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.kinder.suivilecture"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        /*
+         * A INCREMENTER A LA MAIN a chaque publication. Le projet series les a
+         * laisses a 1 et a decouvert le probleme au moment de publier une mise
+         * a jour : le Play Store refuse un versionCode deja utilise.
+         */
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    if (signatureDisponible) {
+        signingConfigs {
+            release {
+                storeFile rootProject.file(proprietesSignature['storeFile'])
+                storePassword proprietesSignature['storePassword']
+                keyAlias proprietesSignature['keyAlias']
+                keyPassword proprietesSignature['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (signatureDisponible) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+/*
+ * ESSAI : le plugin de scan tire DEUX moteurs de lecture.
+ *  - com.google.mlkit:barcode-scanning   : modele embarque (~1 Mo d'assets),
+ *    utilise par startScan()/readBarcodesFromImage(), que nous n'appelons PAS ;
+ *  - play-services-code-scanner          : le scanner Google, telecharge a la
+ *    demande, celui que scan() utilise reellement.
+ * On exclut le premier. A VERIFIER a l'execution : si une classe du plugin
+ * reference le modele au chargement, l'exclusion provoque une erreur de
+ * chargement de classe, pas un simple gain de place.
+ */
+configurations.all {
+    exclude group: 'com.google.mlkit', module: 'barcode-scanning'
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
