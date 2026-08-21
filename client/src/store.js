@@ -168,6 +168,20 @@ export async function setStatut(profileId, oeuvreId, statut, jour) {
   );
 }
 
+/*
+ * Couverture choisie a la main (retour d'usage 84). Elle se range dans la MEME
+ * colonne que celle des sources : rien en aval n'a besoin de savoir d'ou vient
+ * une image, et §9 garantit deja qu'« une donnee corrigee a la main n'est
+ * jamais ecrasee par une lecture automatique ».
+ * Passer `null` remet la couverture d'origine a zero.
+ */
+export function setCouverture(profileId, oeuvreId, url) {
+  return run(
+    'UPDATE oeuvres SET couverture_url = ? WHERE profile_id = ? AND oeuvre_id = ?;',
+    [url || null, profileId, oeuvreId],
+  );
+}
+
 export function setNote(profileId, oeuvreId, note) {
   return run(
     'UPDATE oeuvres SET note = ? WHERE profile_id = ? AND oeuvre_id = ?;',

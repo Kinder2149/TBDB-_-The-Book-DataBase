@@ -22,7 +22,11 @@ export default function Progression({ oeuvre, onFerme, onChange }) {
   const audio = oeuvre.format === 'audio';
 
   const [etape, setEtape] = useState(depart.metriqueConnue ? 'position' : 'metrique');
-  const [total, setTotal] = useState('');
+  /*
+   * Pre-rempli avec la valeur connue : on vient ici pour CORRIGER une
+   * pagination fausse, pas pour la retaper de zero (retour d'usage 82).
+   */
+  const [total, setTotal] = useState(String(depart.total || ''));
   const [pourcentage, setPourcentage] = useState(false);
   const [position, setPositionSaisie] = useState(String(depart.position || ''));
   const [suggestion, setSuggestion] = useState(null);
@@ -125,10 +129,9 @@ export default function Progression({ oeuvre, onFerme, onChange }) {
         )}
       >
         <p className="hint">
-          Ni Google ni Open Library ne connaissent {audio ? 'la durée' : 'la pagination'} de
-          cette édition. Tu la trouveras {audio ? 'sur ton lecteur' : 'sur la dernière page du livre'}.
-          Si tu préfères ne pas chercher, choisis « Je ne sais pas » : la
-          progression se fera en pourcentage, et ça marche très bien.
+          {depart.metriqueConnue
+            ? `Corrige ${audio ? 'la durée' : 'le nombre de pages'} si ton exemplaire ne correspond pas : les éditions varient, et c'est TON édition qui fait foi.`
+            : `Ni Google ni Open Library ne connaissent ${audio ? 'la durée' : 'la pagination'} de cette édition. Tu la trouveras ${audio ? 'sur ton lecteur' : 'sur la dernière page du livre'}. Si tu préfères ne pas chercher, choisis « Je ne sais pas » : la progression se fera en pourcentage, et ça marche très bien.`}
         </p>
         <input
           className="champ__saisie champ__saisie--encadre"
@@ -192,6 +195,35 @@ export default function Progression({ oeuvre, onFerme, onChange }) {
       {audio && unite !== 'pourcent' ? (
         <p className="carte__detail">Soit {enHeures(Number(position) || 0)} d’écoute.</p>
       ) : null}
+
+      {/*
+        Retour d'usage 82 : « si le nombre de pages ne correspond pas a ma
+        version je ne peux pas modifier ». C'etait exact — l'etape metrique
+        etait SAUTEE des que la source avait donne une valeur, donc une
+        pagination fausse etait definitive. Or elle est fausse souvent : les
+        editions poche, club et grand format d'un meme texte n'ont pas la meme
+        pagination, et §5.4 dit deja que c'est l'edition qui porte la mesure.
+        Le lien est ICI, a l'endroit exact ou l'ecart se constate.
+      */}
+      {unite !== 'pourcent' ? (
+        <button
+          type="button"
+          className="btn btn--fantome btn--lien"
+          onClick={() => setEtape('metrique')}
+        >
+          {audio
+            ? 'Ce n’est pas la bonne durée ?'
+            : `Ce n’est pas ${total2} pages dans mon exemplaire`}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="btn btn--fantome btn--lien"
+          onClick={() => { setPourcentage(false); setEtape('metrique'); }}
+        >
+          {audio ? 'Indiquer la durée exacte' : 'Indiquer le nombre de pages'}
+        </button>
+      )}
     </Modal>
   );
 }

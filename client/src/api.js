@@ -14,6 +14,7 @@ import * as store from './store.js';
 import * as books from './books.js';
 import { aujourdhui, progressionDe } from './status.js';
 import * as scanner from './scanner.js';
+import { appelsDuJour, QUOTA_QUOTIDIEN } from './sources/google.js';
 
 /** @typedef {import('./types.js').ResultatRecherche} ResultatRecherche */
 /** @typedef {import('./types.js').Identite} Identite */
@@ -80,11 +81,25 @@ export async function deleteProfile(id) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Signature FIGEE de §2.1 : elle rend un tableau, et continue de le faire.
  * @param {string} texte
  * @param {'titre'|'auteur'|'isbn'} mode
  * @returns {Promise<ResultatRecherche[]>}
  */
 export async function rechercher(texte, mode) {
+  const { resultats } = await books.rechercher(texte, mode);
+  return resultats;
+}
+
+/*
+ * §2.1 s'enrichit, ne se modifie pas — meme regle qu'en tranche 6 pour
+ * `creerOeuvreManuelle`. L'ecran de recherche a besoin de savoir si ce qu'il
+ * affiche vient du reseau ou de l'archive, pour le DIRE ; la fiche de detail,
+ * qui cherche une edition a rattacher, n'en a que faire et garde la forme
+ * simple ci-dessus.
+ * @returns {Promise<{resultats: ResultatRecherche[], ancien: boolean, pose: number|null}>}
+ */
+export async function rechercherAvecEtat(texte, mode) {
   return books.rechercher(texte, mode);
 }
 
@@ -182,6 +197,11 @@ export async function retirerOeuvre(oeuvreId) {
 
 export async function setStatut(oeuvreId, statut) {
   return store.setStatut(await getActiveProfileId(), oeuvreId, statut, aujourdhui());
+}
+
+/* §2.1 s'enrichit : couverture choisie a la main (retour d'usage 84). */
+export async function setCouverture(oeuvreId, dataUrl) {
+  return store.setCouverture(await getActiveProfileId(), oeuvreId, dataUrl);
 }
 
 export async function setNote(oeuvreId, note) {
@@ -322,7 +342,13 @@ export async function getSuggestions() {
     isbn: new Set(bibliotheque.map((o) => o.isbn13).filter(Boolean)),
   };
 
-  return books.suggestions(graines, cycles, exclusions);
+  /*
+   * La cle de cache est l'empreinte des GRAINES, pas du profil : c'est ce qui
+   * fait qu'un livre marque « lu » invalide les suggestions de lui-meme, sans
+   * qu'aucun ecran ait a y penser.
+   */
+  const cleCache = `${profileId}|${graines.map((g) => g.oeuvreId).join(',')}`;
+  return books.suggestions(graines, cycles, exclusions, cleCache);
 }
 
 // ---------------------------------------------------------------------------
@@ -375,6 +401,12 @@ export async function getClesEditions() {
 // ---------------------------------------------------------------------------
 // Diagnostic (écran Réglages)
 // ---------------------------------------------------------------------------
+
+/* §2.1 s'enrichit : etat du quota Google du jour, pour l'ecran Reglages. */
+export async function quotaDuJour() {
+  const utilises = appelsDuJour();
+  return { utilises, total: QUOTA_QUOTIDIEN, restants: Math.max(0, QUOTA_QUOTIDIEN - utilises) };
+}
 
 export async function etatBase() {
   const { plateforme, migration, profil } = await initDb();

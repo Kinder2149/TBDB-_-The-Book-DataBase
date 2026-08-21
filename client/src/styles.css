@@ -293,6 +293,21 @@ button { font: inherit; color: inherit; }
 .hint { color: var(--muted); font-size: .88rem; line-height: 1.6; }
 .error { color: var(--danger); font-size: .88rem; }
 
+/*
+ * Bandeau « resultats gardes sur l'appareil » (tranche 10). Il informe, il
+ * n'alarme pas : les resultats affiches sont valides, ils sont seulement
+ * anciens. D'ou le ton neutre de --muted et non le rouge de --danger — la
+ * couleur d'erreur ici ferait croire que la liste en dessous est fausse.
+ * Les tokens sont ceux du theme, donc le bandeau suit clair et sombre.
+ */
+.hint--archive {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .6rem .75rem; margin-bottom: .75rem;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: .6rem;
+}
+.hint--archive svg { flex: 0 0 auto; }
+
 /* --- Toasts --------------------------------------------------------------- */
 .toasts {
   position: fixed;
@@ -858,3 +873,47 @@ button { font: inherit; color: inherit; }
   color: var(--accent-strong);
   cursor: pointer;
 }
+
+/*
+ * Bouton d'apparence « lien » : une action secondaire qui ne doit pas
+ * concurrencer visuellement le bouton principal de la modale.
+ */
+.btn--lien {
+  display: block; width: 100%; margin-top: .75rem;
+  padding: .4rem 0; font-size: .85rem;
+  color: var(--muted); text-decoration: underline; text-underline-offset: 3px;
+  background: none; border: none;
+}
+
+/*
+ * Regroupement par auteur (retour d'usage 81). L'intertitre porte le nom et le
+ * nombre de livres : c'est ce qui transforme une grille indistincte en
+ * « bibliographie de cet auteur ».
+ */
+.groupe-auteur { margin-bottom: 1.5rem; }
+.groupe-auteur__nom {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: .5rem; margin-bottom: .5rem;
+}
+.groupe-auteur__compte {
+  flex: 0 0 auto; font-size: .78rem; font-weight: 400; color: var(--muted);
+}
+/* Separateur avant les homonymes : ils sont la reponse a une autre question. */
+.groupe-auteur__separateur {
+  margin: 1.25rem 0 .5rem; padding-top: .75rem;
+  border-top: 1px solid var(--border);
+}
+
+/*
+ * Bouton d'ajout de couverture, pose SOUS la vignette de la fiche : la ou
+ * l'absence d'image se constate. Discret, parce qu'il ne sert qu'une fois par
+ * livre — et seulement pour le quart des livres qu'aucune source n'illustre.
+ */
+.fiche__couverture-action {
+  display: flex; align-items: center; justify-content: center; gap: .3rem;
+  width: 100%; margin-top: .4rem; padding: .35rem .25rem;
+  font-size: .72rem; color: var(--muted);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: .4rem; cursor: pointer;
+}
+.fiche__couverture-action svg { flex: 0 0 auto; }

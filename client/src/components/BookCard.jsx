@@ -44,13 +44,21 @@ export default function BookCard({
    * au-delà, c'est un défilement, pas un appui.
    */
   const demarrer = (e) => {
-    if (!suivi || !onAppuiLong) return;
+    /*
+     * `!suivi` bloquait le geste sur l'ecran de RECHERCHE, ou un livre n'a pas
+     * encore de statut. Retour d'usage 83 : c'est justement la qu'il sert le
+     * plus — appuyer longuement sur un resultat l'ajoute directement dans la
+     * bonne categorie, sans passer par sa fiche. La condition ne porte donc
+     * plus que sur la presence d'un gestionnaire : c'est l'ecran qui decide
+     * s'il y a quelque chose a faire, pas la carte.
+     */
+    if (!onAppuiLong) return;
     longDetecte.current = false;
     depart.current = { x: e.clientX, y: e.clientY };
     minuteur.current = setTimeout(() => {
       longDetecte.current = true;
       if (navigator.vibrate) navigator.vibrate(15);
-      onAppuiLong(suivi);
+      onAppuiLong(suivi || resultat);
     }, APPUI_LONG_MS);
   };
 

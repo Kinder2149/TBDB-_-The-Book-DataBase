@@ -8,16 +8,134 @@
  * la frappe (§4.3, quota). Suivre un livre ne pose AUCUNE question (§9).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  rechercher, identifierResultat, getSuggestions, scanDisponible, scannerIsbn,
-  creerOeuvreManuelle,
+  rechercherAvecEtat, identifierResultat, getSuggestions, scanDisponible, scannerIsbn,
+  creerOeuvreManuelle, setStatut,
 } from '../api.js';
+import { LIBELLES, STATUTS, classeStatut } from '../status.js';
 import { notify } from '../notify.js';
 import SearchBar from '../components/SearchBar.jsx';
 import BookCard from '../components/BookCard.jsx';
 import Modal from '../components/Modal.jsx';
 import Icon from '../components/Icon.jsx';
+
+/*
+ * REGROUPEMENT PAR AUTEUR (retour d'usage 81). « La recherche par auteur me
+ * donne des livres plutot qu'une liste d'auteurs et leurs oeuvres. »
+ *
+ * Une vraie liste d'auteurs a ete mesuree puis ECARTEE : Open Library est la
+ * seule source qui en propose une (`/search/authors.json`) et elle met de
+ * 3,8 a 51 SECONDES, en rendant des doublons (« BernarD Werber » et
+ * « Bernard Werber » sont deux fiches distinctes). Google Books, lui, n'a
+ * aucun point d'entree « auteurs ».
+ *
+ * Mais Google rend deja le nom de l'auteur avec chaque livre : le regroupement
+ * se fait donc ICI, sur ce qu'on a deja, sans un seul appel de plus et sans
+ * une seconde d'attente. L'auteur cherche vient en tete, les homonymes en
+ * dessous — ce sont eux, et non le manque de liste, qui brouillaient l'ecran.
+ */
+function sansAccent(texte) {
+  return String(texte || '').toLowerCase().normalize('NFD')
+    // Meme precaution qu'en §books.js : les signes combinants s'ecrivent en
+    // echappement, jamais en caracteres bruts — ils sont invisibles, et une
+    // copie de fichier peut les avaler sans que rien ne le signale.
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/*
+ * Cle de regroupement d'un auteur. Google Books n'a AUCUN identifiant
+ * d'auteur : il n'a que des chaines, et il ecrit le meme ecrivain de
+ * plusieurs facons. Constate sur appels reels :
+ *   « Alexandre Dumas » / « Alexandre Dumas (père) » / « Alexandre Dumas (1802-1870) »
+ *   « John Ronald Reuel Tolkien » / « J.R.R. Tolkien » / « Tolkien J.R.R. »
+ *   « Herbert George Wells » / « H.G Wells » / « H. G. Wells, H. G. »
+ * Deux formes sur quatre recherches testees : ce n'est pas un cas limite.
+ *
+ * La cle est « nom de famille + initiales des autres mots, dedoublonnees et
+ * triees ». Deux choix, tous deux corriges apres mesure :
+ *
+ *  - Le nom de famille est le DERNIER mot de plus d'une lettre. Une premiere
+ *    version prenait « le mot le plus long » : elle echouait sur « Herbert
+ *    George Wells », ou le prenom est plus long que le nom, et laissait Wells
+ *    en quatre groupes. Le dernier mot long marche aussi sur les inversions
+ *    (« Tolkien J.R.R. »), ou les initiales suivent le nom.
+ *  - Les initiales sont DEDOUBLONNEES : « Herbert George Wells H G » repete
+ *    les memes initiales sous deux formes dans une seule chaine.
+ *
+ * LIMITE ASSUMEE : deux auteurs partageant nom de famille ET initiales se
+ * retrouvent fusionnes (« Alexandre Dumas » et « André Dumas »). C'est un
+ * ecran de recherche, pas un catalogue de bibliotheque ; les titres affiches
+ * montrent immediatement si quelque chose detonne.
+ */
+function cleAuteur(nom) {
+  const propre = sansAccent(String(nom || '').replace(/\([^)]*\)/g, ' ').replace(/[.,]/g, ' '));
+  const mots = propre.split(' ').filter(Boolean);
+  if (mots.length === 0) return '';
+
+  const longs = mots.filter((m) => m.length > 1);
+  const famille = longs.length ? longs[longs.length - 1] : mots[mots.length - 1];
+
+  const initiales = [...new Set(
+    mots.filter((m) => m !== famille).map((m) => m[0]),
+  )].sort().join('');
+
+  return `${famille}|${initiales}`;
+}
+
+/* Le nom LISIBLE, pour juger de la proximite avec ce que l'utilisateur a tape.
+ * La cle ci-dessus ne convient pas : « werber » ne se retrouve pas dans
+ * « bernard|w ». */
+function nomComparable(nom) {
+  return sansAccent(String(nom || '').replace(/\([^)]*\)/g, ' '));
+}
+
+function grouperParAuteur(resultats, requete) {
+  const cherche = sansAccent(requete);
+  const groupes = new Map();
+
+  resultats.forEach((r) => {
+    const nom = (r.auteurs && r.auteurs[0]) || 'Auteur inconnu';
+    const cle = cleAuteur(nom);
+    if (!groupes.has(cle)) groupes.set(cle, { nom, livres: [] });
+    const g = groupes.get(cle);
+    // Entre deux ecritures du meme auteur, on affiche la plus courte : c'est
+    // la forme canonique, celle sans les dates ni la mention entre
+    // parentheses. « Alexandre Dumas » plutot que « Alexandre Dumas (père) ».
+    if (nom.length < g.nom.length) g.nom = nom;
+    g.livres.push(r);
+  });
+
+  /* 3 = le nom demande exactement ; 2 = il le contient ; 1 = tous les mots y
+     sont (« werber » trouve « Bernard Werber ») ; 0 = un homonyme. */
+  const proximite = (nom) => {
+    const c = nomComparable(nom);
+    if (!cherche) return 0;
+    if (c === cherche) return 3;
+    if (c.includes(cherche)) return 2;
+    return cherche.split(' ').every((mot) => c.includes(mot)) ? 1 : 0;
+  };
+
+  return [...groupes.values()]
+    .map((g) => ({ ...g, proximite: proximite(g.nom) }))
+    .sort((a, b) => (b.proximite - a.proximite) || (b.livres.length - a.livres.length));
+}
+
+/*
+ * « il y a 5 minutes » plutot qu'une date : ce qui compte pour l'utilisateur
+ * n'est pas QUAND la recherche a ete faite, mais a quel point elle est vieille.
+ */
+function ageLisible(pose) {
+  const minutes = Math.round((Date.now() - pose) / 60000);
+  if (minutes < 2) return 'de tout à l’heure';
+  if (minutes < 60) return `d’il y a ${minutes} minutes`;
+  const heures = Math.round(minutes / 60);
+  if (heures < 24) return heures === 1 ? 'd’il y a une heure' : `d’il y a ${heures} heures`;
+  const jours = Math.round(heures / 24);
+  return jours === 1 ? 'd’hier' : `d’il y a ${jours} jours`;
+}
 
 export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
   const [mode, setMode] = useState('titre');
@@ -27,6 +145,12 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
   const [identite, setIdentite] = useState(null);
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [messageErreur, setMessageErreur] = useState(null);
+  // Age des resultats affiches : non nul = ils viennent de l'archive (§4.7).
+  const [poseArchive, setPoseArchive] = useState(null);
+  // Le texte reellement interroge — sert a mettre l'auteur cherche en tete.
+  const [derniereRequete, setDerniereRequete] = useState('');
+  // Livre sur lequel on vient de faire un appui long, pour choisir sa categorie.
+  const [categorieCible, setCategorieCible] = useState(null);
   const [suggestions, setSuggestions] = useState(null);
   const [suggestionsEnCours, setSuggestionsEnCours] = useState(false);
   const [scanPossible, setScanPossible] = useState(false);
@@ -37,7 +161,21 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
   // pas d'avis en cours de route.
   useEffect(() => { scanDisponible().then(setScanPossible).catch(() => setScanPossible(false)); }, []);
 
+  /*
+   * Les groupes ne se calculent qu'en mode Auteur : c'est le seul mode ou la
+   * question « de qui ? » se pose. En Titre ou ISBN, regrouper n'aurait aucun
+   * sens — on cherche une oeuvre precise, pas une bibliographie.
+   */
+  const groupes = useMemo(
+    () => (mode === 'auteur' && resultats.length > 0
+      ? grouperParAuteur(resultats, derniereRequete)
+      : null),
+    [mode, resultats, derniereRequete],
+  );
+
   const sequence = useRef(0);
+  // Ce qu'il faut rejouer quand l'utilisateur touche « Reessayer ».
+  const derniere = useRef(null);
   const ouvrirRef = useRef(null);
 
   /*
@@ -50,6 +188,7 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
     setMode(suivant);
     setResultats([]);
     setEtat('vide');
+    setPoseArchive(null);
   }, []);
 
   const revenirAuVide = useCallback(() => {
@@ -57,15 +196,19 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
     setResultats([]);
     setEtat('vide');
     setMessageErreur(null);
+    setPoseArchive(null);
   }, []);
 
   const lancer = useCallback(async (texte, modeCourant) => {
     const seq = ++sequence.current;
+    derniere.current = { texte, mode: modeCourant };
+    setDerniereRequete(texte);
     setEtat('charge');
     try {
-      const trouves = await rechercher(texte, modeCourant);
+      const { resultats: trouves, ancien, pose } = await rechercherAvecEtat(texte, modeCourant);
       if (seq !== sequence.current) return;   // une frappe plus récente a gagné
       setResultats(trouves);
+      setPoseArchive(ancien ? pose : null);
       setEtat('fait');
     } catch (e) {
       if (seq !== sequence.current) return;
@@ -107,12 +250,14 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
     if (!isbn) { if (raison) notify(raison); return; }
 
     setMode('isbn');
+    derniere.current = { texte: isbn, mode: 'isbn' };
     const seq = ++sequence.current;
     setEtat('charge');
     try {
-      const trouves = await rechercher(isbn, 'isbn');
+      const { resultats: trouves, ancien, pose } = await rechercherAvecEtat(isbn, 'isbn');
       if (seq !== sequence.current) return;
       setResultats(trouves);
+      setPoseArchive(ancien ? pose : null);
       setEtat('fait');
       if (trouves.length === 0) {
         notify(`Aucun livre trouve pour l'ISBN ${isbn}. Il n'est peut-etre pas catalogue.`);
@@ -167,6 +312,20 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
     }
   }, [onSuivre]);
 
+  /* Une seule definition de la carte de resultat : la grille simple et les
+     grilles par auteur doivent rester identiques a la virgule pres. */
+  const carteResultat = (r) => (
+    <BookCard
+      key={r.cleSource}
+      resultat={r}
+      marque={editionsSuivies.has(r.cleSource)}
+      onOuvrir={ouvrir}
+      onAppuiLong={() => setCategorieCible(r)}
+      onAjoutRapide={ajouterVite}
+      ajoutEnCours={ajoutRapide === r.cleSource}
+    />
+  );
+
   const dejaSuivi = ouvert ? editionsSuivies.has(ouvert.cleSource) : false;
 
   return (
@@ -182,8 +341,27 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
 
       {etat === 'charge' && <p className="hint">Recherche en cours…</p>}
 
+      {/*
+        Une erreur n'est plus un cul-de-sac (§4.7, tranche 10). Six essais
+        laissent environ 4 % des recherches en echec, et il n'y a rien a faire
+        de plus cote reseau : la seule reponse utile est de rendre le nouvel
+        essai IMMEDIAT, sans retaper.
+      */}
       {etat === 'erreur' && (
-        <p className="error">{messageErreur || 'La recherche a échoué.'}</p>
+        <div className="suggestions">
+          <p className="error">{messageErreur || 'La recherche a échoué.'}</p>
+          <button
+            type="button"
+            className="btn btn--large"
+            onClick={() => {
+              const d = derniere.current;
+              if (d) lancer(d.texte, d.mode);
+            }}
+          >
+            <Icon name="actualiser" size={16} />
+            <span>Réessayer</span>
+          </button>
+        </div>
       )}
 
       {etat === 'fait' && resultats.length === 0 && (
@@ -258,6 +436,7 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
                   marque={editionsSuivies.has(r.cleSource)}
                   raison={r.raison}
                   onOuvrir={ouvrir}
+                  onAppuiLong={() => setCategorieCible(r)}
                   onAjoutRapide={ajouterVite}
                   ajoutEnCours={ajoutRapide === r.cleSource}
                 />
@@ -267,20 +446,44 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
         </div>
       )}
 
-      {resultats.length > 0 && (
-        <div className="grille">
-          {resultats.map((r) => (
-            <BookCard
-              key={r.cleSource}
-              resultat={r}
-              marque={editionsSuivies.has(r.cleSource)}
-              onOuvrir={ouvrir}
-              onAjoutRapide={ajouterVite}
-              ajoutEnCours={ajoutRapide === r.cleSource}
-            />
-          ))}
-        </div>
-      )}
+      {poseArchive ? (
+        <p className="hint hint--archive">
+          <Icon name="alerte" size={16} />
+          <span>
+            Google Books ne répond pas. Voici ta recherche {ageLisible(poseArchive)},
+            gardée sur l’appareil.
+          </span>
+        </p>
+      ) : null}
+
+      {/*
+        En mode Auteur, les livres sont presentes PAR AUTEUR : l'auteur cherche
+        d'abord, les homonymes en dessous, sous un intertitre qui le dit. Dans
+        les autres modes, la grille reste telle quelle — regrouper n'y aurait
+        aucun sens.
+      */}
+      {groupes ? (
+        groupes.map((g, rang) => (
+          <div key={g.nom} className="groupe-auteur">
+            {rang === 1 && g.proximite === 0 ? (
+              <p className="hint groupe-auteur__separateur">
+                Autres auteurs portant un nom proche
+              </p>
+            ) : null}
+            <h2 className="soustitre soustitre--serre groupe-auteur__nom">
+              <span>{g.nom}</span>
+              <span className="groupe-auteur__compte">
+                {g.livres.length} livre{g.livres.length > 1 ? 's' : ''}
+              </span>
+            </h2>
+            <div className="grille">
+              {g.livres.map((r) => carteResultat(r))}
+            </div>
+          </div>
+        ))
+      ) : resultats.length > 0 ? (
+        <div className="grille">{resultats.map((r) => carteResultat(r))}</div>
+      ) : null}
 
       {saisie && (
         <Modal
@@ -335,6 +538,42 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
               autoFocus={champ === 'titre'}
             />
           ))}
+        </Modal>
+      )}
+
+      {/*
+        Appui long sur un resultat (retour d'usage 83) : choisir la categorie
+        AJOUTE le livre et lui pose le statut d'un seul geste. Le detour par la
+        fiche n'etait pas une etape utile, c'etait un passage oblige.
+      */}
+      {categorieCible && (
+        <Modal titre={categorieCible.titre} onFermer={() => setCategorieCible(null)}>
+          <p className="hint">Dans quelle catégorie veux-tu le ranger ?</p>
+          <div className="statuts">
+            {STATUTS.map((st) => (
+              <button
+                key={st}
+                type="button"
+                className={`statbtn ${classeStatut(st)}`}
+                onClick={async () => {
+                  const livre = categorieCible;
+                  setCategorieCible(null);
+                  const oeuvreId = await onSuivre(livre, true);
+                  if (!oeuvreId) return;
+                  try {
+                    await setStatut(oeuvreId, st);
+                    await onChangement();
+                    notify(`« ${livre.titre} » — ${LIBELLES[st]}.`, 'info');
+                  } catch (e) {
+                    notify(e.message);
+                  }
+                }}
+              >
+                <span className="statbtn__led" />
+                <span>{LIBELLES[st]}</span>
+              </button>
+            ))}
+          </div>
         </Modal>
       )}
 

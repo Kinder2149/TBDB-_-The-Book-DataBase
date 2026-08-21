@@ -87,3 +87,62 @@ export function lireFichierTexte(accept = '.json,application/json') {
     input.click();
   });
 }
+
+/*
+ * Lit une image choisie par l'utilisateur et la rend en `data:` URL REDUITE
+ * (retour d'usage 84 : « si j'ai pas de couverture je veux pouvoir en ajouter
+ * une moi-meme »).
+ *
+ * Le redimensionnement n'est pas un confort, c'est la condition pour que cette
+ * fonction soit acceptable : une photo de telephone fait 3 a 8 Mo, et elle
+ * finirait telle quelle dans la colonne `couverture_url`, donc dans SQLite,
+ * donc dans le fichier de SAUVEGARDE — quelques couvertures suffiraient a le
+ * rendre intransportable. Ramenee a 400 px de large en JPEG, une couverture
+ * pese 30 a 60 Ko, soit l'ordre de grandeur d'une vignette Google.
+ * 400 px : la grille affiche des cartes de 150 px environ, l'ecran de fiche
+ * un peu plus ; au-dela on stocke des pixels que personne ne verra.
+ */
+const LARGEUR_COUVERTURE = 400;
+
+export function lireImageReduite(largeurMax = LARGEUR_COUVERTURE) {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.style.display = 'none';
+
+    input.addEventListener('change', () => {
+      const fichier = input.files && input.files[0];
+      document.body.removeChild(input);
+      if (!fichier) { resolve(null); return; }
+
+      const lecteur = new FileReader();
+      lecteur.onerror = () => reject(new Error('L’image n’a pas pu être lue.'));
+      lecteur.onload = () => {
+        const image = new Image();
+        image.onerror = () => reject(new Error('Ce fichier n’est pas une image lisible.'));
+        image.onload = () => {
+          // On ne grandit JAMAIS une petite image : agrandir n'ajoute aucun
+          // detail, cela ne fait qu'alourdir le stockage.
+          const ratio = Math.min(1, largeurMax / image.width);
+          const largeur = Math.round(image.width * ratio);
+          const hauteur = Math.round(image.height * ratio);
+
+          const toile = document.createElement('canvas');
+          toile.width = largeur;
+          toile.height = hauteur;
+          toile.getContext('2d').drawImage(image, 0, 0, largeur, hauteur);
+
+          // JPEG et non PNG : une couverture est une photographie, le PNG y
+          // serait trois a cinq fois plus lourd sans rien apporter.
+          resolve(toile.toDataURL('image/jpeg', 0.75));
+        };
+        image.src = String(lecteur.result);
+      };
+      lecteur.readAsDataURL(fichier);
+    });
+
+    document.body.appendChild(input);
+    input.click();
+  });
+}

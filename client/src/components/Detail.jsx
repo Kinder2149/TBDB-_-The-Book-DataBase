@@ -1,8 +1,8 @@
 /*
  * Detail.jsx — la fiche d'un livre suivi, en overlay. Applique §6.
  * Ordre imposé par le contexte : couverture et titre → statut → éditions et
- * édition active → cycle et tome → résumé → zone « Identification » en bas.
- * Ordre reel : statut -> editions -> PROGRESSION -> cycle -> resume ->
+ * édition active → résumé → zone « Identification » en bas.
+ * Ordre reel : statut -> editions -> PROGRESSION -> resume ->
  * identification. Les listes arrivent en tranche 6.
  * Applique §3.2 : les deux rattrapages d'identité vivent ici, parce que
  * l'identité est faillible dans les deux sens — l'empreinte peut créer deux
@@ -13,12 +13,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  getEditions, listCycles, setStatut, setCycle, setEditionActive, ajouterEdition,
-  supprimerEdition, detacherEdition, regrouperOeuvres, retirerOeuvre, rechercher,
+  getEditions, setStatut, setEditionActive, ajouterEdition,
+  supprimerEdition, detacherEdition, regrouperOeuvres, retirerOeuvre, rechercher, setCouverture,
   ajouterEditionManuelle, getListes, getListesDeLOeuvre, addToListe,
   removeFromListe, createListe,
 } from '../api.js';
 import { LIBELLES, STATUTS, classeStatut, progressionDe } from '../status.js';
+import { lireImageReduite } from '../files.js';
 import { notify } from '../notify.js';
 import Modal from './Modal.jsx';
 import Icon from './Icon.jsx';
@@ -27,9 +28,6 @@ import ProgressBar from './ProgressBar.jsx';
 
 export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProgression }) {
   const [editions, setEditions] = useState([]);
-  const [cycles, setCycles] = useState([]);
-  const [nomCycle, setNomCycle] = useState(oeuvre.cycleNom || '');
-  const [tomeCycle, setTomeCycle] = useState(oeuvre.cycleTome || '');
   const [sousModale, setSousModale] = useState(null); // {type, cible}
   const [recherche, setRecherche] = useState({ texte: '', resultats: [], etat: 'vide' });
   const [filtreCible, setFiltreCible] = useState('');
@@ -43,10 +41,9 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
   const charger = useCallback(async () => {
     try {
       const [e, c, l, m] = await Promise.all([
-        getEditions(oeuvre.oeuvreId), listCycles(), getListes(), getListesDeLOeuvre(oeuvre.oeuvreId),
+        getEditions(oeuvre.oeuvreId), getListes(), getListesDeLOeuvre(oeuvre.oeuvreId),
       ]);
       setEditions(e);
-      setCycles(c);
       setListes(l);
       setMesListes(m);
     } catch (err) {
@@ -69,10 +66,6 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
     }
   }, [charger, onChange]);
 
-  const enregistrerCycle = () => agir(
-    () => setCycle(oeuvre.oeuvreId, nomCycle, tomeCycle ? Number(tomeCycle) : null),
-    nomCycle.trim() ? 'Cycle enregistré.' : 'Cycle effacé : la lecture automatique reprend.',
-  );
 
   const chercherEdition = async (texte) => {
     setRecherche((r) => ({ ...r, texte, etat: 'charge' }));
@@ -101,7 +94,23 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
     const { type, cible } = sousModale;
 
     if (type === 'ajout') {
-      return (
+      /*
+   * L'image est reduite a 400 px AVANT d'entrer en base (voir files.js) : une
+   * photo de telephone brute rendrait le fichier de sauvegarde intransportable.
+   */
+  const choisirCouverture = async () => {
+    try {
+      const image = await lireImageReduite();
+      if (!image) return;                 // l'utilisateur a referme le selecteur
+      await setCouverture(oeuvre.oeuvreId, image);
+      await onChange();
+      notify('Couverture enregistrée.', 'info');
+    } catch (e) {
+      notify(e.message);
+    }
+  };
+
+  return (
         <Modal titre="Ajouter une édition" onFermer={fermerSous}>
           <p className="hint">
             Cherche l’exemplaire que tu possèdes — par son ISBN au dos, ou par
@@ -328,10 +337,26 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
       )}
     >
       <div className="fiche__entete">
+        {/*
+          Retour d'usage 84 : « si j'ai pas de couverture je veux pouvoir en
+          ajouter une moi-meme ». Google n'illustre que 65 % des resultats et
+          le repli Open Library ne monte qu'a 75 % : pour le dernier quart,
+          aucune source ne viendra jamais. La photo du livre pose sur la table
+          est alors la meilleure couverture possible.
+          Le bouton est sur la couverture elle-meme, la ou le manque se voit.
+        */}
         <div className="fiche__couverture">
           {oeuvre.couvertureUrl
             ? <img src={oeuvre.couvertureUrl} alt="" loading="lazy" />
             : <span className="carte-livre__sans-image">Pas de couverture</span>}
+          <button
+            type="button"
+            className="fiche__couverture-action"
+            onClick={choisirCouverture}
+          >
+            <Icon name="image" size={14} />
+            <span>{oeuvre.couvertureUrl ? 'Remplacer' : 'Ajouter une photo'}</span>
+          </button>
         </div>
         <div className="fiche__resume-tete">
           <p className="fiche__auteurs">{oeuvre.auteurs || 'Auteur inconnu'}</p>
@@ -377,40 +402,6 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
         </button>
       </div>
 
-      <div className="cycle">
-        <h3 className="soustitre soustitre--serre">Cycle</h3>
-        <div className="cycle__saisie">
-          {/* L'autocomplétion sur les cycles déjà en base est ce qui garantit
-              qu'un cycle ne se dédouble pas sur une faute de frappe (§4.4). */}
-          <input
-            className="champ__saisie champ__saisie--encadre"
-            list="cycles-connus"
-            value={nomCycle}
-            onChange={(e) => setNomCycle(e.target.value)}
-            placeholder="Nom du cycle"
-            aria-label="Nom du cycle"
-          />
-          <datalist id="cycles-connus">
-            {cycles.map((c) => <option key={c} value={c} />)}
-          </datalist>
-          <input
-            className="champ__saisie champ__saisie--encadre champ__saisie--court"
-            type="number"
-            min="1"
-            value={tomeCycle}
-            onChange={(e) => setTomeCycle(e.target.value)}
-            placeholder="Tome"
-            aria-label="Numéro de tome"
-          />
-          <button type="button" className="btn btn--fantome" onClick={enregistrerCycle}>
-            <Icon name="valider" size={16} />
-          </button>
-        </div>
-        <p className="carte__detail">
-          Vider le nom remet ce livre à la lecture automatique. Tant qu’il est
-          renseigné à la main, aucune source ne l’écrasera.
-        </p>
-      </div>
 
       {/* Listes personnalisees (tranche 6) : cocher / decocher, creation a la
           volee. Une liste ne change jamais le statut du livre. */}

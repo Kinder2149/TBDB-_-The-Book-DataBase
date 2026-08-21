@@ -13,6 +13,7 @@ import { App as CapApp } from '@capacitor/app';
 import {
   demarrer, etatBase, getBibliotheque, ajouterOeuvre,
   setStatut, getClesEditions, setActiveProfileId, surChangementDeFond, getProfilActif,
+  quotaDuJour,
 } from './api.js';
 import { LIBELLES, STATUTS, classeStatut } from './status.js';
 import { notify } from './notify.js';
@@ -47,6 +48,7 @@ export default function App() {
   const [detailId, setDetailId] = useState(null);
   const [progressionId, setProgressionId] = useState(null);
   const [sauvegardeOuverte, setSauvegardeOuverte] = useState(false);
+  const [quota, setQuota] = useState(null);
 
   /*
    * §9 prescrit une « Map du suivi en mémoire », héritée du projet séries, où
@@ -89,13 +91,28 @@ export default function App() {
    */
   useEffect(() => { surChangementDeFond(recharger); return () => surChangementDeFond(null); }, [recharger]);
 
-  const suivre = useCallback(async (resultat) => {
+  /* Relu a chaque affichage des Reglages : le compteur bouge a chaque recherche. */
+  useEffect(() => {
+    if (view !== 'reglages') return;
+    quotaDuJour().then(setQuota).catch(() => setQuota(null));
+  }, [view]);
+
+  /*
+   * Rend l'identifiant de l'oeuvre ajoutee. L'appel restait muet, ce qui
+   * interdisait d'enchainer une action dessus — or l'appui long depuis la
+   * recherche (retour d'usage 83) doit ajouter le livre PUIS lui poser un
+   * statut. `ajouterOeuvre` est idempotent (INSERT OR IGNORE), donc un livre
+   * deja suivi rend simplement sa cle existante.
+   */
+  const suivre = useCallback(async (resultat, silencieux = false) => {
     try {
-      await ajouterOeuvre(resultat);
+      const oeuvreId = await ajouterOeuvre(resultat);
       await recharger();
-      notify(`« ${resultat.titre} » est dans ta bibliothèque.`, 'info');
+      if (!silencieux) notify(`« ${resultat.titre} » est dans ta bibliothèque.`, 'info');
+      return oeuvreId;
     } catch (e) {
       notify(`Impossible d'ajouter ce livre : ${e.message}`);
+      return null;
     }
   }, [recharger]);
 
@@ -207,6 +224,27 @@ export default function App() {
                 Tout est enregistré sur cet appareil, et nulle part ailleurs.
                 Une sauvegarde est le seul moyen de retrouver ta bibliothèque si
                 tu changes de téléphone.
+              </p>
+            </div>
+
+            {/*
+              Le quota Google etait INVISIBLE : on ne decouvrait l'avoir epuise
+              qu'en recevant « Trop de recherches pour aujourd'hui », c'est-a-dire
+              quand il n'y avait plus rien a faire de la journee. Le rendre
+              visible, c'est permettre de le menager.
+            */}
+            <div className="carte">
+              <h2 className="carte__titre">Recherches du jour</h2>
+              <div className="carte__ligne">
+                <span>Utilisées aujourd’hui</span>
+                <b>{quota ? `${quota.utilises} / ${quota.total}` : '…'}</b>
+              </div>
+              <p className="carte__detail">
+                Google Books limite l’application à {quota ? quota.total : 1000} recherches
+                par jour. Une recherche au fil de la frappe en consomme une ;
+                le bouton « Actualiser » des suggestions en consomme une quinzaine,
+                mais une seule fois par jour — ensuite il ressert le même résultat
+                tant que ta bibliothèque n’a pas changé.
               </p>
             </div>
 

@@ -30,3 +30,6 @@ android/app/src/main/assets/public/
 # Systèmes
 .DS_Store
 Thumbs.db
+
+# APK de test construits localement — jamais versionnes
+*.apk

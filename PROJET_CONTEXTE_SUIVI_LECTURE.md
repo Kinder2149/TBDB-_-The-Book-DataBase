@@ -739,17 +739,24 @@ Repris du projet séries, adapté. À vide, l'écran Recherche affiche :
 - Debounce **350 ms** sur le champ de recherche, hérité.
 - **Cache mémoire `Map` avec TTL 30 min sur les résultats de recherche
   uniquement.** Les fiches n'en ont pas besoin : elles sont en base (§3.5).
-- **Délai maximal de 12 s sur tout appel réseau, par `AbortController`.**
+- **Délai maximal de 12 s sur tout appel réseau, par `AbortController`** —
+  ramené à **8 s pour Google Books** en tranche 8 : un appel qui aboutit répond
+  en moins de 1,1 s, et ce plafond borne CHAQUE essai.
   Corrigé après constat en tranche 0 : sans lui, une source qui ne répond pas
   laisse le bouton sur « Vérification… » indéfiniment, sans message et sans
   issue. Le contexte le jugeait « souhaitable mais non bloquant » ; c'est faux
   dès qu'une source traine. L'échec de délai est un message comme un autre.
-- **UN réessai, et uniquement sur `503`** — point tranché en tranche 2, après
-  mesure. Google Books rend des `503 Service temporarily unavailable` en
-  alternance quasi parfaite : six appels identiques d'affilée ont donné
-  `200 503 200 503 200 503`. Ce n'est pas une panne, c'est le régime normal de
-  la source. Un seul réessai à 800 ms suffit donc presque toujours, et trois
-  recherches sur trois passent ensuite sans erreur visible.
+- **CINQ réessais, et uniquement sur `503` : `[0, 0, 250, 750, 1500]` ms** —
+  révisé en tranche 8 après comparaison A/B (§12, correction 70). Google Books
+  rend des `503 Service temporarily unavailable` sur **25 à 40 %** des appels,
+  mesuré en rafale *et* espacé de 4 s : ce n'est pas une panne, c'est le régime
+  normal de la source, et rien dans la forme de la requête n'y change quoi que
+  ce soit. Deux faits commandent la forme retenue : un `503` revient en
+  **170-650 ms** quand un `200` prend **430-1000 ms** — l'échec coûte moins
+  cher que le succès, donc les deux premiers réessais sont quasi gratuits ; mais
+  les `503` arrivent **en rafales**, donc les réessais purement immédiats ne
+  suffisent pas, d'où les pauses tardives, qui ne se paient que dans ces cas
+  rares.
   Le `429` (quota, §4.1) n'est **PAS** réessayé : insister l'aggrave.
   Le « aucun retry » hérité venait de TMDB, qui ne rendait pas de 503.
 - **Le message d'erreur traduit par la source remonte jusqu'à l'écran.** Il ne
@@ -1268,7 +1275,104 @@ avant d'être corrigée. Deux ont infirmé mon hypothèse de départ.
 | # | Point | Correction |
 |---|---|---|
 | 68 | Le repli ISBN d'Open Library ne se déclenchait que sur « zéro résultat », pas sur une **panne** de Google — or c'est le cas le plus fréquent | Repli sur les deux cas ; si les deux sources sont muettes ET Google en panne, l'erreur remonte, pour ne pas faire croire que le livre n'existe pas |
-| 69 | Un seul réessai laissait **25 %** des recherches en échec visible (Google rend un `503` une requête sur deux), et ça s'est produit en usage | **Deux** réessais, délais croissants (800 ms puis 2 s) : environ 12 % d'échecs. Le `429` de quota n'est toujours jamais réessayé |
+| 69 | Un seul réessai laissait **25 %** des recherches en échec visible (Google rend un `503` une requête sur deux), et ça s'est produit en usage | **Deux** réessais, délais croissants (800 ms puis 2 s) : environ 12 % d'échecs. Le `429` de quota n'est toujours jamais réessayé. *(Révisé en tranche 8, voir 70.)* |
+
+---
+
+### Tranche 8 — 2026-08-21 : « Google Books n'est pas disponible, et c'est lent »
+
+Deux symptômes rapportés, un seul creusement. **Une hypothèse de départ a été
+mesurée puis abandonnée, et une affirmation de mon propre audit était fausse.**
+
+| # | Point | Ce que la mesure a dit |
+|---|---|---|
+| 70 | Les réessais de la correction 69 attendaient **800 ms puis 2 s** | Un `503` revient en **170-650 ms**, un `200` en **430-1000 ms** : l'échec coûte MOINS cher que le succès. Ces pauses ajoutaient **2,8 s** à chaque recherche difficile. Nouvelle forme `[0, 0, 250, 750, 1500]` : **A/B sur 45 recherches par stratégie**, alternées — ancien 41/45 en 1685 ms de moyenne, nouveau 43/45 en **811 ms**. Vérifié dans l'application : **20/20, 696 ms de moyenne, 1326 ms au pire** |
+| 71 | Hypothèse posée puis **INVALIDÉE** : « attendre n'achète rien, tous les réessais peuvent être immédiats » | Les `503` arrivent **en rafales**, pas isolément. La stratégie purement immédiate `[0,0,0]` retombe dans la même rafale : 42/45 contre 43/45, et surtout elle échoue là où une pause de 250 ms suffisait. Les pauses sont gardées, mais **tardives** : elles ne se paient que dans les cas rares |
+| 72 | Hypothèse posée puis **INVALIDÉE** : « Open Library peut servir de repli quand Google tombe en mode Titre/Auteur » | Open Library met **6 à 21 s** et part en dépassement de délai ; sa pertinence en français est mauvaise (recherche « les fourmis » → il répond « Dune »). Remplacer une panne par 20 s d'attente et un mauvais résultat n'est pas une correction. **Repli abandonné** — la réponse est le cache persistant et un bouton « Réessayer » |
+| 73 | Affirmation **fausse de mon propre audit** : « ouvrir une fiche bloque l'écran 4 à 36 s » | `Recherche.jsx` appelle `setOuvert(resultat)` **avant** d'attendre Open Library : la fiche s'affiche déjà instantanément. Ce qui traîne est son **contenu** (bloc identité, résumé), pas son ouverture. La latence ressentie venait d'abord de **la recherche elle-même** |
+| 74 | Le plafond de 12 s bornait **chaque** essai | Avec six essais possibles, l'utilisateur pouvait rester plus d'une minute sur « Recherche en cours… » avant le moindre message. Ramené à **8 s** pour Google : un appel qui aboutit répond en moins de 1,1 s |
+
+---
+
+### Tranche 9 — 2026-08-21 : le contenu de la fiche, et ce qu'on repaie pour rien
+
+| # | Point | Correction, et ce qu'elle a donné |
+|---|---|---|
+| 75 | `completer()` appelait `oeuvreParCle` **sans budget** : plafond de 12 s, et 12 s de plus si l'œuvre avait été fusionnée — **24 s pour un champ de confort**, le plus long appel du parcours et le moins essentiel | Budget de **4 s**, comme l'identification. Et le saut de redirection reçoit le temps **restant**, pas le budget entier : sinon deux sauts coûtent deux fois le plafond et le « budget » n'en est pas un. Garantie désormais bornée : **8 s au pire pour une fiche** (4 s d'identité + 4 s de résumé) contre 28 s |
+| 76 | Le cache d'identité ne gardait que les **réussites**. Or **65 %** des ISBN français échouent (§3.2) : les livres les plus lents étaient exactement ceux qu'on réinterrogeait le plus souvent, à chaque ouverture et à chaque ajout | Les échecs sont mémorisés **avec le budget sous lequel ils sont survenus**. Un budget égal ou plus petit se contente du cache ; un budget **plus grand** retente — ce qui préserve exactement la reprise en tâche de fond de la correction 61. Vérifié : redemande à 4 s → **0 ms**, à 2 s → **0 ms**, à 15 s → **2361 ms**, l'appel a bien lieu |
+| 77 | *(trouvé par la mesure de 76)* L'identification était bien mise en cache, mais le **résumé** était redemandé à chaque ouverture : rouvrir cinq livres déjà vus coûtait encore **1,3 s** de réseau pour un texte déjà obtenu | Cache des fiches d'œuvre, `null` compris — une œuvre sans description n'en aura pas davantage plus tard. Mesuré sur 5 fiches : 1re ouverture **7032 ms**, 2e et 3e **0 ms** |
+
+---
+
+### Tranche 10 — 2026-08-21 : une panne de Google n'est plus un écran vide
+
+Six essais laissent encore **~4 %** des recherches en échec, parce que les
+`503` arrivent en rafales. Deux replis ont été envisagés puis **écartés par la
+mesure** : Open Library en source de découverte (correction 72), et une seconde
+clé — le quota Google est **par projet, pas par clé**. Restait ce qu'on avait
+déjà : la même recherche, faite plus tôt.
+
+| # | Point | Correction |
+|---|---|---|
+| 78 | Une panne de Google donnait un message et **rien d'autre**, même sur une recherche faite deux minutes plus tôt | **Archive persistante** des recherches dans `idb-keyval` — déjà installé, déjà utilisé par `db.js` : aucune dépendance nouvelle. Durée de vie **7 jours** et non 30 min : ce n'est pas un cache de performance (celui-là reste en mémoire, au-dessus), c'est un filet contre une panne de source, et un résultat d'il y a trois jours reste bon pour un catalogue de livres |
+| 79 | L'utilisateur ne devait pas croire que ces résultats sont frais | Bandeau `.hint--archive` : « Google Books ne répond pas. Voici ta recherche **de tout à l'heure**, gardée sur l'appareil. » L'âge est **relatif** — ce qui compte n'est pas quand la recherche a été faite, mais à quel point elle est vieille. Ton neutre (`--muted`) et non `--danger` : la liste en dessous est valide, seulement ancienne |
+| 80 | Sur une recherche **jamais faite**, l'erreur restait un cul-de-sac : il fallait retaper | Bouton **« Réessayer »**, qui rejoue la dernière recherche sans retaper |
+
+**§2.1 s'enrichit, ne se modifie pas** — même règle qu'en tranche 6 :
+`rechercher(texte, mode)` garde sa signature figée et rend toujours un tableau
+(`Detail.jsx`, qui cherche une édition à rattacher, n'a que faire de l'âge des
+résultats). La nouvelle `rechercherAvecEtat(texte, mode)` rend
+`{resultats, ancien, pose}` et ne sert qu'à l'écran de recherche.
+
+**Vérifié dans l'application, Google coupé à 100 % :**
+
+| Cas | Résultat |
+|---|---|
+| Recherche vive | 20 livres, archive écrite sur disque |
+| Panne, même recherche, cache mémoire encore chaud | 20 livres, **pas** de bandeau — c'est le cache qui sert, ils sont frais |
+| Panne, **application relancée** (cache vidé, archive intacte) | **20 livres, aucune erreur, bandeau affiché** |
+| Panne, recherche jamais faite | message d'erreur **+ bouton « Réessayer »** |
+
+---
+
+### Tranche 11 — 2026-08-21 : cinq retours après essai sur téléphone
+
+| # | Symptôme rapporté | Cause RÉELLE, mesurée | Correction |
+|---|---|---|---|
+| 81 | « La recherche par auteur me donne des livres plutôt qu'une liste d'auteurs et leurs œuvres » | Une vraie liste d'auteurs a été **mesurée puis écartée** : `/search/authors.json` d'Open Library met **3,8 à 51 s** et rend des doublons (« BernarD Werber » et « Bernard Werber » sont deux fiches). Google Books n'a **aucun** point d'entrée « auteurs » | Regroupement **côté application**, sur ce que Google rend déjà : un intertitre « Bernard Werber — 20 livres » par auteur, l'auteur cherché en tête, les homonymes sous un séparateur. **Zéro appel réseau en plus, zéro attente** |
+| 82 | « Si le nombre de pages ne correspond pas à ma version je ne peux pas modifier » | Exact. L'étape de pagination était **sautée** dès que la source avait donné une valeur (`etape = metriqueConnue ? 'position' : 'metrique'`) : une pagination fausse était **définitive**. Or elle est fausse souvent — poche, club et grand format n'ont pas la même pagination | Lien « Ce n'est pas *N* pages dans mon exemplaire » à l'étape de position, **là où l'écart se constate**, et champ pré-rempli : on vient corriger, pas retaper |
+| 83 | « Je n'ai pas d'appui long sur un livre pour choisir la catégorie, je suis obligé d'aller sur sa page » | Le geste existait et était branché sur la **Bibliothèque**, mais `BookCard` le refusait quand le livre n'était pas déjà suivi (`if (!suivi)`) — donc jamais sur l'écran de **Recherche**, qui est justement l'endroit demandé | La condition ne porte plus que sur la présence d'un gestionnaire : c'est l'écran qui décide s'il y a quelque chose à faire, pas la carte. Un appui long sur un résultat **ajoute le livre ET lui pose son statut d'un seul geste** (`suivre()` rend désormais l'identifiant, il était muet) |
+| 84 | « Si j'ai pas de couverture je veux pouvoir en ajouter une moi-même » | Google illustre **65 %** des résultats, le repli Open Library monte à **75 %** : pour le dernier quart, aucune source ne viendra jamais | Bouton sur la vignette de la fiche. L'image est **réduite à 400 px en JPEG avant d'entrer en base** — ce n'est pas un confort : une photo de téléphone brute (3024×4032) irait telle quelle dans `couverture_url`, donc dans SQLite, donc dans le fichier de **sauvegarde**. Mesuré : **97 % de gain**, 100 couvertures pèsent **0,4 Mo** au lieu de 14 Mo |
+| 85 | « Le bloc Cycle ne sert à rien, on supprime » | — | Section d'édition du cycle retirée de la fiche, avec son état et son appel `listCycles()`. **L'affichage** du cycle sous le titre est conservé (« Dune, tome 3 ») : c'est une information, pas un bloc de saisie. `setCycle` reste dans la façade, plus aucun écran ne l'appelle |
+
+**Pièges rencontrés en écrivant cette tranche**, tous deux corrigés :
+
+- Le motif d'accents `[̀-ͯ]` s'est écrit une première fois en
+  **caractères bruts** dans `Recherche.jsx` — exactement ce que `books.js`
+  met en garde depuis la tranche 2 : ce sont des signes combinants invisibles.
+  Vérifié par `cat -v`, réécrit en échappement.
+- La clé de regroupement d'auteur a d'abord pris « le mot le plus long » pour
+  nom de famille. Elle échouait sur « **Herbert** George **Wells** », où le
+  prénom est plus long que le nom, et laissait Wells en **quatre** groupes.
+  Corrigée en « dernier mot de plus d'une lettre », avec initiales
+  **dédoublonnées**. Vérifié : Wells, Tolkien et Dumas rendent chacun **un seul
+  groupe de 20 livres** là où ils en donnaient trois ou quatre.
+
+---
+
+### Tranche 12 — 2026-08-21 : le quota, enfin visible et ménagé
+
+| # | Point | Correction, et ce qu'elle a donné |
+|---|---|---|
+| 86 | Le bouton « Actualiser » des suggestions consommait **jusqu'à 15** des 1 000 requêtes quotidiennes, **à chaque clic** | Cache **journalier**, et non 7 jours comme l'archive de recherche : des suggestions sont une proposition de lecture, en revoir les mêmes une semaine durant serait pire que de payer quinze requêtes. Mesuré : 1er « Actualiser » **6 requêtes en 1066 ms**, 2e **0 requête en 2 ms** |
+| 87 | Un cache figé serait pire que pas de cache : marquer un livre « lu » doit changer les suggestions | La clé de cache est **l'empreinte des graines**, pas le profil. Un livre marqué lu change la clé, donc invalide le cache **de lui-même** — aucun bouton, aucun réglage. Vérifié : après changement de bibliothèque, **8 requêtes**, le recalcul a bien lieu |
+| 88 | Le quota était **invisible** : on découvrait l'avoir épuisé en recevant « Trop de recherches pour aujourd'hui », c'est-à-dire quand il n'y avait plus rien à faire de la journée | Carte « Recherches du jour » dans les Réglages : `15 / 1000`. Le compteur porte sur **chaque appel HTTP, réessais de 503 compris** — c'est ainsi que Google compte. Sur `localStorage` et non en base : la valeur est jetable et n'a rien à faire dans la sauvegarde du profil |
+| 89 | Un lot de suggestions vide aurait été mis en cache | Un résultat vide vient presque toujours d'une panne de source : le mettre en cache **figerait un écran vide pour la journée**. Seuls les lots non vides sont gardés |
+
+**Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
+initial — « Google Books n'est pas disponible, et c'est lent » — ont été
+traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
+retours d'usage (11), quota (12).
 
 **Nouvelles fonctions de la façade** (§2.1 s'enrichit, ne se modifie pas) :
 `creerOeuvreManuelle(saisie)` et `surChangementDeFond(fn)` — ce dernier permet
@@ -1280,7 +1384,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **69 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **89 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

@@ -214,14 +214,19 @@ export async function identiteParRecherche(titre, auteur, budgetMs) {
  * Fiche d'œuvre : résumé et sujets. Sert à combler un résumé absent chez
  * Google — « un résumé anglais vaut mieux qu'un vide, et on ne traduit pas ».
  */
-export async function oeuvreParCle(cleOeuvre) {
+export async function oeuvreParCle(cleOeuvre, budgetMs = DELAI_MAX_MS) {
   const brut = cleOeuvre.replace(/^ol:/, '');
-  let donnees = await olGet(`/works/${brut}.json`);
+  const depart = Date.now();
+  let donnees = await olGet(`/works/${brut}.json`, budgetMs);
 
   // Une œuvre fusionnée rend un /type/redirect au lieu de la fiche. Piège non
   // documenté : sans ce saut, le résumé serait vide sans raison apparente.
+  // Le budget est ce qu'il RESTE, pas le budget entier : sinon deux sauts
+  // coûtent deux fois le plafond, et le « budget » n'en est plus un.
   if (donnees && donnees.type && donnees.type.key === '/type/redirect' && donnees.location) {
-    donnees = await olGet(`/works/${olid(donnees.location)}.json`);
+    const reste = budgetMs - (Date.now() - depart);
+    if (reste <= 0) return null;
+    donnees = await olGet(`/works/${olid(donnees.location)}.json`, reste);
   }
   if (!donnees) return null;
 

@@ -22,8 +22,28 @@ const cacheRecherche = new Map();
  * l'appel le plus lent du projet (jusqu'à 9 s sur téléphone en 5G), payé deux
  * fois pour rien. Le cache est ici plutôt qu'un paramètre ajouté à la façade :
  * les signatures de §2.1 ne se modifient pas.
+ *
+ * Il mémorise aussi les ÉCHECS, avec le budget sous lequel ils sont survenus.
+ * Corrigé en tranche 9 : la version précédente ne gardait que les réussites,
+ * donc un livre qu'Open Library ne connaît pas — c'est-à-dire 65 % des ISBN
+ * français (§3.2) — était réinterrogé INTÉGRALEMENT à chaque ouverture de
+ * fiche et à chaque ajout. Les livres les plus lents étaient exactement ceux
+ * qu'on repayait le plus souvent.
+ * Le budget mémorisé est ce qui permet de garder la reprise en tâche de fond :
+ * un échec à 4 s ne dit rien d'un essai à 15 s, donc un budget PLUS GRAND
+ * retente ; un budget égal ou plus petit se contente du cache.
  */
 const cacheIdentite = new Map();
+
+/*
+ * Cache des fiches d'oeuvre — le resume de complement (§4.3). Mesure de la
+ * tranche 9 : sans lui, l'identification etait bien mise en cache mais le
+ * resume, lui, etait redemande a CHAQUE ouverture de fiche. Rouvrir cinq
+ * livres deja vus coutait encore 1,3 s d'appels reseau pour un texte qu'on
+ * avait deja. Les `null` sont memorises aussi : une oeuvre sans description
+ * n'en aura pas davantage a la lecture suivante.
+ */
+const cacheOeuvre = new Map();
 
 /*
  * Budget de l'identification INTERACTIVE — celle qui fait attendre devant la
@@ -34,6 +54,17 @@ const cacheIdentite = new Map();
  * livre entre en empreinte locale et l'identite est reprise en tache de fond.
  */
 const BUDGET_INTERACTIF_MS = 4000;
+
+/*
+ * Budget du RESUME de complement. Il n'en avait aucun : `completer()` appelait
+ * Open Library sans rien passer, donc retombait sur le plafond de 12 s — et
+ * 12 s de plus si l'oeuvre avait ete fusionnee, soit 24 s pour un champ de
+ * confort. C'est le plus long appel du parcours, et le moins essentiel :
+ * §4.3 dit qu'un resume anglais vaut mieux qu'un vide, pas qu'il vaut une
+ * demi-minute d'attente. 4 s, comme l'identification, et la fiche reste
+ * lisible sans lui.
+ */
+const BUDGET_RESUME_MS = 4000;
 
 /*
  * Empreinte locale — le FILET de §3.2, pas le mécanisme principal.
@@ -72,12 +103,44 @@ function normaliser(texte, couperSousTitre) {
  */
 export async function rechercher(texte, mode) {
   const requete = texte.trim();
-  if (!requete) return [];
+  if (!requete) return { resultats: [], ancien: false, pose: null };
 
   const cle = `${mode}:${requete.toLowerCase()}`;
   const enCache = cacheRecherche.get(cle);
-  if (enCache && Date.now() - enCache.pose < CACHE_TTL_MS) return enCache.resultats;
+  if (enCache && Date.now() - enCache.pose < CACHE_TTL_MS) {
+    return { resultats: enCache.resultats, ancien: false, pose: enCache.pose };
+  }
 
+  let resultats;
+  try {
+    resultats = await interroger(requete, mode);
+  } catch (panne) {
+    /*
+     * ARCHIVE — le dernier recours, et le seul qui reste (tranche 10).
+     * Six essais laissent encore environ 4 % des recherches en echec, parce
+     * que les 503 de Google arrivent en rafales (§4.7). Deux replis ont ete
+     * envisages puis ecartes par la mesure : Open Library en source de
+     * decouverte (6 a 21 s, pertinence francaise mauvaise — correction 72),
+     * et une seconde cle (le quota est par PROJET, pas par cle).
+     * Restait ce qu'on avait deja : la meme recherche, faite plus tot. Mieux
+     * vaut des resultats d'hier annonces comme tels qu'un ecran vide.
+     */
+    const archive = await lireArchive(cle);
+    if (archive) return { resultats: archive.resultats, ancien: true, pose: archive.pose };
+    throw panne;
+  }
+
+  const illustres = resultats.map(avecCouvertureDeRepli);
+  const pose = Date.now();
+  cacheRecherche.set(cle, { pose, resultats: illustres });
+  // Volontairement non attendu : archiver ne doit pas retarder l'affichage.
+  if (illustres.length) void ecrireArchive(cle, pose, illustres);
+  return { resultats: illustres, ancien: false, pose };
+}
+
+/* Le chemin reseau, inchange — extrait pour que `rechercher` ne fasse plus que
+ * decider entre le vif, le cache et l'archive. */
+async function interroger(requete, mode) {
   let resultats;
   if (mode === 'auteur') {
     resultats = await google.rechercherParAuteur(requete);
@@ -119,9 +182,39 @@ export async function rechercher(texte, mode) {
     resultats = await google.rechercherParTitre(requete);
   }
 
-  const illustres = resultats.map(avecCouvertureDeRepli);
-  cacheRecherche.set(cle, { pose: Date.now(), resultats: illustres });
-  return illustres;
+  return resultats;
+}
+
+// ---------------------------------------------------------------------------
+// Archive persistante des recherches (tranche 10)
+// ---------------------------------------------------------------------------
+
+/*
+ * `idb-keyval`, deja installe et deja utilise par db.js pour le cliche de la
+ * base : aucune dependance nouvelle. Duree de vie 7 jours et non 30 minutes —
+ * ce n'est pas un cache de performance (celui-la est en memoire, au-dessus),
+ * c'est un filet contre une panne de source. Un resultat d'il y a trois jours
+ * reste un bon resultat pour un catalogue de livres.
+ */
+const ARCHIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const PREFIXE_ARCHIVE = 'recherche:';
+
+async function lireArchive(cle) {
+  try {
+    const { get } = await import('idb-keyval');
+    const entree = await get(PREFIXE_ARCHIVE + cle);
+    if (!entree || Date.now() - entree.pose > ARCHIVE_TTL_MS) return null;
+    return entree;
+  } catch {
+    return null;   // IndexedDB indisponible : on n'a simplement pas de filet
+  }
+}
+
+async function ecrireArchive(cle, pose, resultats) {
+  try {
+    const { set } = await import('idb-keyval');
+    await set(PREFIXE_ARCHIVE + cle, { pose, resultats });
+  } catch { /* ecrire l'archive n'est jamais une raison d'echouer */ }
 }
 
 /**
@@ -132,14 +225,18 @@ export async function rechercher(texte, mode) {
  */
 export async function identifier(resultat, budgetMs = BUDGET_INTERACTIF_MS) {
   const enCache = cacheIdentite.get(resultat.cleSource);
-  // Une identite RESOLUE est definitive ; une empreinte de repli ne l'est pas,
-  // elle merite d'etre retentee avec plus de temps.
-  if (enCache && enCache.identite.resolue && Date.now() - enCache.pose < CACHE_TTL_MS) {
-    return enCache.identite;
+  const frais = enCache && Date.now() - enCache.pose < CACHE_TTL_MS;
+
+  if (frais) {
+    // Une identite RESOLUE est definitive.
+    if (enCache.identite.resolue) return enCache.identite;
+    // Un echec ne vaut que pour le temps qu'on lui a laisse : retenter n'a de
+    // sens qu'avec PLUS de temps (c'est le cas de la reprise en tache de fond).
+    if (budgetMs <= enCache.budget) return enCache.identite;
   }
 
   const identite = await resoudre(resultat, budgetMs);
-  cacheIdentite.set(resultat.cleSource, { pose: Date.now(), identite });
+  cacheIdentite.set(resultat.cleSource, { pose: Date.now(), identite, budget: budgetMs });
   return identite;
 }
 
@@ -219,7 +316,21 @@ const COUPE = 20;
  * un de 1 000, partagé par tous les porteurs de la clé (arbitrage 17).
  * Chaque appel est enveloppé : une graine qui échoue ne casse pas l'écran.
  */
-export async function suggestions(graines, cycles, exclusions) {
+export async function suggestions(graines, cycles, exclusions, cleCache) {
+  /*
+   * CACHE JOURNALIER (§4.6 point 6, tranche 12). Une actualisation coute
+   * jusqu'a 15 des 1 000 requetes quotidiennes : une poignee de clics suffit
+   * a entamer serieusement la journee, et l'utilisateur n'a aucun moyen de
+   * le savoir. Or le resultat ne change PAS tant que la bibliotheque ne
+   * change pas — les memes graines produisent les memes suggestions.
+   * La cle porte donc l'empreinte des graines : marquer un livre « lu »
+   * invalide le cache tout seul, sans bouton ni reglage.
+   */
+  if (cleCache) {
+    const garde = await lireSuggestions(cleCache);
+    if (garde) return garde;
+  }
+
   const lots = [];
 
   for (const g of graines.slice(0, MAX_GRAINES)) {
@@ -277,9 +388,43 @@ export async function suggestions(graines, cycles, exclusions) {
 
   // Tri par score, puis par ordre d'arrivée Google — qui est déjà un ordre de
   // pertinence. Aucune popularité n'est disponible (arbitrage 16, confirmé).
-  return [...parCle.values()]
+  const retenues = [...parCle.values()]
     .sort((a, b) => (b.score - a.score) || (a.rang - b.rang))
     .slice(0, COUPE);
+
+  // Un lot vide ne se garde pas : il vient presque toujours d'une panne de
+  // source, et le mettre en cache figerait un ecran vide pour la journee.
+  if (cleCache && retenues.length) void ecrireSuggestions(cleCache, retenues);
+  return retenues;
+}
+
+/*
+ * Les suggestions vivent jusqu'a la fin de la JOURNEE, pas 7 jours comme
+ * l'archive de recherche : elles sont une proposition de lecture, et en
+ * revoir exactement les memes une semaine durant serait pire que de payer
+ * quinze requetes.
+ */
+async function lireSuggestions(cle) {
+  try {
+    const { get } = await import('idb-keyval');
+    const entree = await get('suggestions:' + cle);
+    if (!entree || entree.jour !== jourCourant()) return null;
+    return entree.resultats;
+  } catch {
+    return null;
+  }
+}
+
+async function ecrireSuggestions(cle, resultats) {
+  try {
+    const { set } = await import('idb-keyval');
+    await set('suggestions:' + cle, { jour: jourCourant(), resultats });
+  } catch { /* sans cache, on paiera les requetes : degradation acceptable */ }
+}
+
+function jourCourant() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /*
@@ -304,10 +449,17 @@ export function avecCouvertureDeRepli(resultat) {
  * vide, et on ne traduit pas (§9).
  * @returns {Promise<ResultatRecherche>}
  */
-export async function completer(resultat, identite) {
+export async function completer(resultat, identite, budgetMs = BUDGET_RESUME_MS) {
   if (resultat.resume || !identite.resolue) return resultat;
   try {
-    const oeuvre = await ol.oeuvreParCle(identite.oeuvreId);
+    const enCache = cacheOeuvre.get(identite.oeuvreId);
+    const frais = enCache && Date.now() - enCache.pose < CACHE_TTL_MS;
+
+    const oeuvre = frais
+      ? enCache.oeuvre
+      : await ol.oeuvreParCle(identite.oeuvreId, budgetMs);
+    if (!frais) cacheOeuvre.set(identite.oeuvreId, { pose: Date.now(), oeuvre });
+
     if (!oeuvre) return resultat;
     return {
       ...resultat,

@@ -22,6 +22,9 @@ const TRACES = {
   scan: 'M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10',
   sauver: 'M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15M12 3v12M7.5 10.5 12 15l4.5-4.5',
   actualiser: 'M20 12a8 8 0 1 1-2.4-5.7M20 4v4h-4',
+  // Cadre, soleil, et la ligne d'horizon en montagne : le pictogramme
+  // d'image le plus universel, au meme trait que les autres.
+  image: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M8.5 9.5h.01',
 };
 
 export default function Icon({ name, size = 22, className = '' }) {
