@@ -1369,6 +1369,24 @@ résultats). La nouvelle `rechercherAvecEtat(texte, mode)` rend
 | 88 | Le quota était **invisible** : on découvrait l'avoir épuisé en recevant « Trop de recherches pour aujourd'hui », c'est-à-dire quand il n'y avait plus rien à faire de la journée | Carte « Recherches du jour » dans les Réglages : `15 / 1000`. Le compteur porte sur **chaque appel HTTP, réessais de 503 compris** — c'est ainsi que Google compte. Sur `localStorage` et non en base : la valeur est jetable et n'a rien à faire dans la sauvegarde du profil |
 | 89 | Un lot de suggestions vide aurait été mis en cache | Un résultat vide vient presque toujours d'une panne de source : le mettre en cache **figerait un écran vide pour la journée**. Seuls les lots non vides sont gardés |
 
+---
+
+### Tranche 13 — 2026-08-21 : « CreateConnection: Connection lecture already exists »
+
+Symptôme : l'application s'arrête toute seule pendant l'essai, puis **tout
+ajout de livre** échoue sur ce message, en anglais, jusqu'au redémarrage.
+
+| # | Point | Cause RÉELLE | Correction |
+|---|---|---|---|
+| 90 | La connexion SQLite était déjà reprise via `isConnection()` — et le message est apparu quand même | Une connexion SQLite vit du côté **natif** et survit au rechargement du WebView ; le pool JavaScript, lui, repart vide. `isConnection()` interroge **ce pool JavaScript** : après un rechargement il répond « non » alors que la connexion existe toujours côté natif, et `createConnection` échoue. C'est exactement ce qui se produit quand Android relance l'application après l'avoir mise en veille ou tuée pour récupérer de la mémoire | `checkConnectionsConsistency()` — la méthode prévue par le plugin pour resynchroniser les deux mondes — appelée **avant** toute interrogation. Et parce qu'une course reste possible, la création est doublée d'un rattrapage : si elle échoue *parce que la connexion existe*, on la reprend au lieu d'abandonner |
+| 91 | *(trouvé en cherchant 90)* Une fois la première erreur survenue, **toutes** les opérations suivantes échouaient sur la même erreur, définitivement | `initDb()` mémorisait la promesse d'ouverture — y compris quand elle était **rejetée**. Une panne passagère devenait donc permanente jusqu'au redémarrage : c'est ce qui faisait revenir le bandeau à chaque tentative | Une tentative ratée est oubliée, la suivante repart proprement. Vérifié : à l'ancien comportement, 3 tentatives → 3 échecs ; au nouveau, la 2ᵉ réussit |
+
+**Non élucidé, et dit comme tel** : *pourquoi* l'application s'est arrêtée
+reste inconnu — cela demande les journaux du téléphone (`logcat`), qui n'ont
+pas été capturés. Les corrections ci-dessus traitent les **conséquences** de
+cet arrêt, qui étaient bien réelles et bloquantes ; elles n'en traitent pas la
+cause. Si l'arrêt se reproduit, c'est cette cause-là qu'il faudra chercher.
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1384,7 +1402,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **89 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **91 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

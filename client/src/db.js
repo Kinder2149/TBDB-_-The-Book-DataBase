@@ -195,12 +195,40 @@ async function createNativeEngine() {
   const { CapacitorSQLite, SQLiteConnection } = await import('@capacitor-community/sqlite');
   const sqlite = new SQLiteConnection(CapacitorSQLite);
 
-  // Une connexion peut survivre au rechargement du WebView : on la reprend au
-  // lieu d'en ouvrir une seconde, qui échouerait.
+  /*
+   * REPRISE DE CONNEXION — corrige « CreateConnection: Connection lecture
+   * already exists », constate sur telephone apres que l'application se soit
+   * arretee toute seule.
+   *
+   * Une connexion SQLite vit du cote NATIF et survit au rechargement du
+   * WebView ; le pool JavaScript, lui, repart vide. `isConnection()` interroge
+   * ce pool JavaScript : apres un rechargement il repond « non » alors que la
+   * connexion existe toujours cote natif — et `createConnection` echoue.
+   * C'est exactement le cas quand Android relance l'application apres l'avoir
+   * mise en veille ou tuee pour recuperer de la memoire.
+   *
+   * `checkConnectionsConsistency()` est la methode prevue par le plugin pour
+   * resynchroniser les deux : elle est appelee AVANT toute interrogation.
+   * Et parce qu'une course reste possible entre les deux appels, la creation
+   * est doublee d'un rattrapage : si elle echoue parce que la connexion
+   * existe, on la reprend au lieu d'abandonner.
+   */
+  try {
+    await sqlite.checkConnectionsConsistency();
+  } catch { /* rien a reconcilier au tout premier lancement */ }
+
+  let db;
   const dejaLa = (await sqlite.isConnection(DB_NAME, false)).result;
-  const db = dejaLa
-    ? await sqlite.retrieveConnection(DB_NAME, false)
-    : await sqlite.createConnection(DB_NAME, false, 'no-encryption', 1, false);
+  if (dejaLa) {
+    db = await sqlite.retrieveConnection(DB_NAME, false);
+  } else {
+    try {
+      db = await sqlite.createConnection(DB_NAME, false, 'no-encryption', 1, false);
+    } catch (e) {
+      if (!/already exists/i.test(String(e && e.message))) throw e;
+      db = await sqlite.retrieveConnection(DB_NAME, false);
+    }
+  }
 
   if (!(await db.isDBOpen()).result) await db.open();
 
@@ -254,9 +282,22 @@ async function ouvrir() {
   return { plateforme: moteur.plateforme, migration, profil };
 }
 
-/** Ouvre la base une fois pour toutes. Idempotent. */
+/*
+ * Ouvre la base une fois pour toutes. Idempotent — mais un ECHEC ne doit pas
+ * etre definitif, et il l'etait : la promesse rejetee restait memorisee, donc
+ * toutes les operations suivantes echouaient sur la meme erreur jusqu'au
+ * redemarrage de l'application. C'est ce qui faisait revenir le bandeau
+ * « Impossible d'ajouter ce livre » a chaque tentative une fois la premiere
+ * echouee, meme quand la cause etait passagere.
+ * On oublie donc une tentative ratee : la suivante repart proprement.
+ */
 export function initDb() {
-  if (!pretPromise) pretPromise = ouvrir();
+  if (!pretPromise) {
+    pretPromise = ouvrir().catch((e) => {
+      pretPromise = null;
+      throw e;
+    });
+  }
   return pretPromise;
 }
 
