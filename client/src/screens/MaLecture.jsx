@@ -8,14 +8,14 @@
  */
 
 import { useMemo } from 'react';
-import { progressionDe, estAParaitre } from '../status.js';
+import { progressionDe, estEnAttenteDeParution } from '../status.js';
 import BookCard from '../components/BookCard.jsx';
 import ProgressBar from '../components/ProgressBar.jsx';
 import Icon from '../components/Icon.jsx';
 
 export default function MaLecture({ bibliotheque, cardProps, onProgression }) {
   const { enCours, tomesSuivants, aParaitre } = useMemo(() => {
-    const parus = bibliotheque.filter((o) => !estAParaitre(o.datePublication));
+    const parus = bibliotheque.filter((o) => !estEnAttenteDeParution(o));
 
     /*
      * Tome suivant : uniquement sur les cycles RÉELLEMENT renseignés, et
@@ -41,7 +41,7 @@ export default function MaLecture({ bibliotheque, cardProps, onProgression }) {
     return {
       enCours: parus.filter((o) => o.statut === 'en_cours'),
       tomesSuivants: suivants,
-      aParaitre: bibliotheque.filter((o) => estAParaitre(o.datePublication)),
+      aParaitre: bibliotheque.filter((o) => estEnAttenteDeParution(o)),
     };
   }, [bibliotheque]);
 

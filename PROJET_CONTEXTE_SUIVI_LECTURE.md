@@ -1465,6 +1465,62 @@ sentir.
 
 ---
 
+---
+
+### Tranche 16 — 2026-08-25 : « plein de trucs bizarres »
+
+Retour d'usage : « j'ajoute des livres tout va bien, je scan un livre il le
+reconnaît, je l'ajoute, et puis je reviens dans ma bibliothèque il n'est plus
+là ? j'ai une catégorie audio ? » — suivi de : « l'application n'est pas finie
+et même bâclée parfois ».
+
+**Le jugement était fondé.** Quatre défauts, dont un que j'avais moi-même
+introduit et livré trois fois.
+
+| # | Symptôme | Cause RÉELLE, mesurée | Correction |
+|---|---|---|---|
+| 95 | **La fiche de détail plantait à l'ouverture**, sur les trois derniers APK livrés | `choisirCouverture` avait été insérée **à l'intérieur d'une autre fonction** en tranche 11 : elle était donc invisible depuis le rendu, et React levait `choisirCouverture is not defined`. **Ni le build ni les 95 vérifications ne l'ont vu** — c'est une erreur d'exécution, pas de compilation, et rien n'ouvrait alors un écran. L'`ErrorBoundary` masquait la casse | Fonction remise au bon niveau, et **famille 6 de vérifications créée** (voir plus bas) |
+| 96 | Un livre scanné « disparaissait » de la bibliothèque | Il n'avait pas disparu : il était rangé sous « Pas encore paru ». `finDePeriode('2026')` rendait **31 décembre 2026**, donc au 25 août 2026 **tout livre publié dans l'année en cours** était déclaré à venir. Or Google ne donne souvent **que l'année** : c'est le cas le plus fréquent, pas un cas limite | `debutDePeriode()` remplace `finDePeriode()` : face à une date incomplète, on suppose que le livre **est sorti**. Se tromper ainsi l'affiche un peu tôt ; se tromper dans l'autre sens le fait disparaître aux yeux de son propriétaire. **Les deux erreurs ne se valent pas** |
+| 97 | Un livre marqué **Lu** restait rangé « À paraître » et ne comptait dans **aucun** statut | La mise de côté ignorait le statut. **Le projet films/séries ne fait pas cette erreur** : `Upcoming` y filtre sur `status === 'a_voir'`. Cette condition manquait ici | `estEnAttenteDeParution(oeuvre)` : un livre qu'on a commencé, lu ou abandonné appartient à sa bibliothèque, quelle que soit la date du catalogue |
+| 98 | « J'ai une catégorie audio ? » | Un filtre Tout / Papier / Numérique / Audio occupait une ligne entière en permanence. Et il était **faux** : sur 4 livres papier, toucher « Audio » en affichait 1, parce que la section « Pas encore paru » ignorait les filtres | Le filtre ne s'affiche **que si la bibliothèque contient plusieurs formats**, et la section « Pas encore paru » lui obéit enfin |
+
+**Couvertures manquantes** — seconde priorité désignée par Kinder. Mesure sur
+80 résultats réels :
+
+| | |
+|---|---|
+| couverture fournie par Google | **81 %** |
+| rattrapées par le repli Open Library | **0 sur 15** |
+| aucune couverture possible | **19 %** |
+
+Le repli Open Library par ISBN, annoncé au §4.2 comme rattrapant « deux sur
+cinq », **n'en rattrape aucun**. Une autre piste a été testée puis écartée :
+l'URL de couverture Google construite à la main rend une **image générique de
+1 269 octets**, jamais la vraie. Ces 19 % n'auront donc jamais de photo.
+
+D'où `CouvertureDessinee.jsx` : au lieu d'une case grise « Pas de couverture »,
+le titre et l'auteur sur une teinte **calculée depuis le titre** — stable d'une
+session à l'autre, pour que l'œil retrouve le livre dans la grille. Un seul
+domicile, partagé par la grille et la fiche.
+
+### Famille 6 de vérifications — « les écrans se rendent sans planter »
+
+La vérification qui manquait, et qui a coûté trois versions. Elle **dessine**
+chaque écran avec des données crédibles et vérifie qu'il ne lève pas d'erreur.
+Cela n'atteste pas qu'un écran est joli — cela atteste qu'il s'affiche, ce qui
+est le minimum.
+
+**Preuve faite** : le bug 95 a été réintroduit volontairement, la famille 6 l'a
+signalé immédiatement (`choisirCouverture is not defined`), puis il a été
+retiré. Total : **115 vérifications**.
+
+**Leçon, écrite ici pour ne pas être réapprise** : les familles 1 à 3
+vérifiaient des *pièces*. Un projet d'interface a besoin qu'on vérifie aussi
+que l'*assemblage* s'affiche. Sans cela, on livre du code qui compile et qui
+plante.
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1480,7 +1536,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **94 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **98 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

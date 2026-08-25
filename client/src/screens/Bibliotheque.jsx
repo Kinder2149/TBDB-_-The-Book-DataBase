@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { LIBELLES, STATUTS, classeStatut, estAParaitre } from '../status.js';
+import { LIBELLES, STATUTS, classeStatut, estEnAttenteDeParution } from '../status.js';
 import { getListes, getListeItems, deleteListe } from '../api.js';
 import { notify } from '../notify.js';
 import BookCard from '../components/BookCard.jsx';
@@ -42,19 +42,43 @@ export default function Bibliotheque({ bibliotheque, cardProps }) {
   }, [listeActive, bibliotheque]);
 
   const { compteurs, aParaitre, visibles } = useMemo(() => {
-    const paraitre = bibliotheque.filter((o) => estAParaitre(o.datePublication));
-    const parus = bibliotheque.filter((o) => !estAParaitre(o.datePublication));
+    /*
+     * Un livre n'est mis de cote QUE s'il est encore « à lire » ET pas sorti
+     * (§status.js). Avant cette regle, un livre marque « Lu » mais date de
+     * l'annee en cours disparaissait de la bibliotheque ET de ses compteurs.
+     */
+    const paraitre = bibliotheque.filter((o) => estEnAttenteDeParution(o));
+    const parus = bibliotheque.filter((o) => !estEnAttenteDeParution(o));
 
     const c = {};
     STATUTS.forEach((s) => { c[s] = parus.filter((o) => o.statut === s).length; });
 
     // Le filtre porte sur le format de l'ÉDITION ACTIVE (§6) : il répond à
     // « sur quel support je le lis », pas « sous quels supports je le possède ».
-    let liste = statutActif ? parus.filter((o) => o.statut === statutActif) : parus;
-    if (format !== 'tout') liste = liste.filter((o) => (o.format || 'papier') === format);
+    const parFormat = (o) => format === 'tout' || (o.format || 'papier') === format;
 
-    return { compteurs: c, aParaitre: paraitre, visibles: liste };
+    let liste = statutActif ? parus.filter((o) => o.statut === statutActif) : parus;
+    liste = liste.filter(parFormat);
+
+    /*
+     * La section « Pas encore paru » suivait sa propre route et ignorait les
+     * filtres : sur quatre livres papier, toucher « Audio » en affichait
+     * quand meme un. Elle obeit desormais au filtre de format comme le reste.
+     */
+    return { compteurs: c, aParaitre: paraitre.filter(parFormat), visibles: liste };
   }, [bibliotheque, statutActif, format]);
+
+  /*
+   * Le filtre de format ne s'affiche que s'il sert a quelque chose. Sur une
+   * bibliotheque entierement papier — le cas de presque tout le monde — ses
+   * quatre boutons occupaient une ligne entiere pour rien, et faisaient se
+   * demander pourquoi l'application parle de livres audio.
+   */
+  const formatsPresents = useMemo(
+    () => new Set(bibliotheque.map((o) => o.format || 'papier')),
+    [bibliotheque],
+  );
+  const filtreFormatUtile = formatsPresents.size > 1;
 
   if (bibliotheque.length === 0) {
     return (
@@ -83,6 +107,7 @@ export default function Bibliotheque({ bibliotheque, cardProps }) {
         ))}
       </div>
 
+      {filtreFormatUtile && (
       <div className="seg" role="group" aria-label="Filtre de format">
         {FORMATS.map((f) => (
           <button
@@ -96,6 +121,7 @@ export default function Bibliotheque({ bibliotheque, cardProps }) {
           </button>
         ))}
       </div>
+      )}
 
       {/* Listes personnalisees : des puces, apres les statuts (§6). */}
       {listes.length > 0 && (

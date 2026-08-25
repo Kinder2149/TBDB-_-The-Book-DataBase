@@ -36,18 +36,6 @@ export function aujourdhui() {
  * TMDB rendait toujours une date complète — c'est le seul endroit où la
  * transposition depuis le projet séries est fausse (§5.2).
  */
-export function finDePeriode(datePublication) {
-  if (!datePublication) return null;
-  const d = String(datePublication).trim();
-  if (/^\d{4}$/.test(d)) return `${d}-12-31`;
-  if (/^\d{4}-\d{2}$/.test(d)) {
-    const [an, mois] = d.split('-').map(Number);
-    const dernier = new Date(an, mois, 0).getDate();
-    return `${d}-${String(dernier).padStart(2, '0')}`;
-  }
-  return d.slice(0, 10);
-}
-
 /*
  * Progression — §5.3. C'est une SOUSTRACTION, jamais un appel réseau : c'est
  * l'écart le plus rentable avec le projet séries, où le calcul de progression
@@ -100,10 +88,55 @@ export function enHeures(minutes) {
   return h > 0 ? `${h} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
 }
 
-/** Vrai si le livre n'est pas encore paru. Exclu du compteur « À lire » (§6). */
+/*
+ * DEBUT de la periode designee par une date incomplete, et non sa fin.
+ * Corrige le 2026-08-25, apres le retour d'usage le plus grave du projet.
+ *
+ * La version precedente etendait « 2026 » au 31 decembre 2026. Consequence :
+ * le 25 aout 2026, TOUT livre publie dans l'annee en cours etait declare
+ * « pas encore paru » et sortait de la bibliotheque. Or Google Books ne donne
+ * souvent QUE l'annee — c'est donc le cas le plus frequent, pas un cas limite,
+ * et c'est exactement ce qui faisait « disparaitre » les livres scannes.
+ *
+ * Le choix de fond : face a une date incomplete, on suppose que le livre EST
+ * SORTI. Se tromper dans ce sens affiche un livre un peu tot dans la
+ * bibliotheque ; se tromper dans l'autre le fait disparaitre de la vue de son
+ * proprietaire. Les deux erreurs ne se valent pas.
+ */
+export function debutDePeriode(datePublication) {
+  if (!datePublication) return null;
+  const d = String(datePublication).trim();
+  if (/^\d{4}$/.test(d)) return `${d}-01-01`;
+  if (/^\d{4}-\d{2}$/.test(d)) return `${d}-01`;
+  if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+  return null;   // texte illisible : on ne devine pas, le livre est considere paru
+}
+
+/**
+ * Ce livre est-il encore a paraitre ?
+ * @param {string|null} datePublication
+ * @param {string} [jour] jour de reference au format ISO (sert aux verifications)
+ */
 export function estAParaitre(datePublication, jour = aujourdhui()) {
-  const fin = finDePeriode(datePublication);
-  return fin !== null && fin > jour;
+  const debut = debutDePeriode(datePublication);
+  return debut !== null && debut > jour;
+}
+
+/*
+ * Faut-il METTRE CE LIVRE DE COTE en attendant sa sortie ?
+ *
+ * Regle heritee du projet films/series, qui manquait ici : un titre qu'on a
+ * deja commence n'est JAMAIS annonce comme a venir. Sans cette condition, un
+ * livre marque « Lu » se retrouvait range sous « A paraitre » et ne comptait
+ * dans aucun statut — l'utilisateur le voyait comme perdu.
+ *
+ * Un livre qu'on a touche appartient a sa bibliotheque, quelle que soit la
+ * date que raconte le catalogue.
+ */
+export function estEnAttenteDeParution(oeuvre, jour = aujourdhui()) {
+  if (!oeuvre) return false;
+  if ((oeuvre.statut || 'a_lire') !== 'a_lire') return false;
+  return estAParaitre(oeuvre.datePublication, jour);
 }
 
 /*

@@ -491,6 +491,45 @@ button { font: inherit; color: inherit; }
 
 .carte-livre__couverture img { width: 100%; height: 100%; object-fit: cover; }
 
+/*
+ * Couverture DESSINEE, pour les 19 % de livres qu'aucune source n'illustre
+ * (mesure du 2026-08-25). Le fond est pose en style en ligne, calcule a partir
+ * du titre : la teinte est donc stable, et deux livres voisins dans la grille
+ * ne se ressemblent pas. Texte clair impose dans les deux themes, puisque le
+ * fond est toujours sombre.
+ */
+.carte-livre__dessinee {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: .35rem;
+  width: 100%;
+  height: 100%;
+  padding: .6rem .5rem;
+  text-align: center;
+}
+.carte-livre__dessinee-titre {
+  color: #FFFFFF;
+  font-family: var(--serif, Georgia, serif);
+  font-size: .8rem;
+  line-height: 1.25;
+  /* Un titre long ne doit pas deborder de la vignette : on le coupe a 5 lignes. */
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.carte-livre__dessinee-auteur {
+  color: rgba(255, 255, 255, .72);
+  font-size: .64rem;
+  letter-spacing: .02em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Conserve : la fiche de detail s'en sert encore. */
 .carte-livre__sans-image {
   padding: .5rem;
   color: var(--faint);

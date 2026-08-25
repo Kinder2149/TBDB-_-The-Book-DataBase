@@ -23,6 +23,7 @@ import { lireImageReduite } from '../files.js';
 import { notify } from '../notify.js';
 import Modal from './Modal.jsx';
 import Icon from './Icon.jsx';
+import CouvertureDessinee from './CouvertureDessinee.jsx';
 import EditionPicker from './EditionPicker.jsx';
 import ProgressBar from './ProgressBar.jsx';
 
@@ -94,23 +95,7 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
     const { type, cible } = sousModale;
 
     if (type === 'ajout') {
-      /*
-   * L'image est reduite a 400 px AVANT d'entrer en base (voir files.js) : une
-   * photo de telephone brute rendrait le fichier de sauvegarde intransportable.
-   */
-  const choisirCouverture = async () => {
-    try {
-      const image = await lireImageReduite();
-      if (!image) return;                 // l'utilisateur a referme le selecteur
-      await setCouverture(oeuvre.oeuvreId, image);
-      await onChange();
-      notify('Couverture enregistrée.', 'info');
-    } catch (e) {
-      notify(e.message);
-    }
-  };
-
-  return (
+      return (
         <Modal titre="Ajouter une édition" onFermer={fermerSous}>
           <p className="hint">
             Cherche l’exemplaire que tu possèdes — par son ISBN au dos, ou par
@@ -323,6 +308,29 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
   }
 
   // --- fiche --------------------------------------------------------------
+  /*
+   * L'image est reduite a 400 px AVANT d'entrer en base (voir files.js) : une
+   * photo de telephone brute rendrait le fichier de sauvegarde intransportable.
+   *
+   * ATTENTION : cette fonction a ete inseree PAR ERREUR a l'interieur d'une
+   * autre le 2026-08-21 (tranche 11), ce qui la rendait invisible depuis le
+   * rendu principal. La fiche de detail plantait donc a l'ouverture — sur
+   * trois versions livrees, sans que le build ni les verifications ne le
+   * voient : c'est une erreur d'EXECUTION, pas de compilation, et aucune
+   * verification n'ouvrait alors la fiche de detail.
+   */
+  const choisirCouverture = async () => {
+    try {
+      const image = await lireImageReduite();
+      if (!image) return;                 // l'utilisateur a referme le selecteur
+      await setCouverture(oeuvre.oeuvreId, image);
+      await onChange();
+      notify('Couverture enregistrée.', 'info');
+    } catch (e) {
+      notify(e.message);
+    }
+  };
+
   return (
     <Modal
       titre={oeuvre.titre}
@@ -348,7 +356,7 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
         <div className="fiche__couverture">
           {oeuvre.couvertureUrl
             ? <img src={oeuvre.couvertureUrl} alt="" loading="lazy" />
-            : <span className="carte-livre__sans-image">Pas de couverture</span>}
+            : <CouvertureDessinee titre={oeuvre.titre} auteur={oeuvre.auteurs} />}
           <button
             type="button"
             className="fiche__couverture-action"

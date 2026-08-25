@@ -13,6 +13,7 @@
 import { useRef, useState } from 'react';
 import { classeStatut } from '../status.js';
 import Icon from './Icon.jsx';
+import CouvertureDessinee from './CouvertureDessinee.jsx';
 
 const APPUI_LONG_MS = 450;
 const TOLERANCE_PX = 12;
@@ -107,7 +108,7 @@ export default function BookCard({
               onError={() => setImageCassee(true)}
             />
           ) : (
-            <span className="carte-livre__sans-image">Pas de couverture</span>
+            <CouvertureDessinee titre={resultat.titre} auteur={auteur} />
           )}
           {suivi ? <span className="carte-livre__lisere" /> : null}
         </span>

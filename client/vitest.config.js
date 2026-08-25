@@ -10,7 +10,7 @@ export default defineConfig({
   // Necessaire pour lire les fichiers .jsx des ecrans.
   plugins: [react()],
   test: {
-    include: ['tests/**/*.test.js'],
+    include: ['tests/**/*.test.js', 'tests/**/*.test.jsx'],
     setupFiles: ['./tests/preparation.js'],
     // Les verifications de base de donnees partagent un moteur SQL en memoire :
     // elles doivent se suivre, pas se chevaucher.
