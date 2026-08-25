@@ -105,3 +105,17 @@ export function estAParaitre(datePublication, jour = aujourdhui()) {
   const fin = finDePeriode(datePublication);
   return fin !== null && fin > jour;
 }
+
+/*
+ * « il y a 5 minutes » plutot qu'une date : ce qui compte pour l'utilisateur
+ * n'est pas QUAND la recherche a ete faite, mais a quel point elle est vieille.
+ */
+export function ageLisible(pose) {
+  const minutes = Math.round((Date.now() - pose) / 60000);
+  if (minutes < 2) return 'de tout à l’heure';
+  if (minutes < 60) return `d’il y a ${minutes} minutes`;
+  const heures = Math.round(minutes / 60);
+  if (heures < 24) return heures === 1 ? 'd’il y a une heure' : `d’il y a ${heures} heures`;
+  const jours = Math.round(heures / 24);
+  return jours === 1 ? 'd’hier' : `d’il y a ${jours} jours`;
+}

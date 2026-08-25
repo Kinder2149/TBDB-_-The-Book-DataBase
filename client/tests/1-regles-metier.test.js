@@ -14,8 +14,8 @@ import { describe, it, expect } from 'vitest';
 import { empreinteOeuvre } from '../src/books.js';
 import { normaliserDatePublication, lireCycle } from '../src/sources/openlibrary.js';
 import { estIsbn } from '../src/scanner.js';
-import { progressionDe, aujourdhui, classeStatut, LIBELLES, STATUTS } from '../src/status.js';
-import { cleAuteur, grouperParAuteur, ageLisible } from '../src/screens/Recherche.jsx';
+import { progressionDe, aujourdhui, classeStatut, LIBELLES, STATUTS, ageLisible } from '../src/status.js';
+import { cleAuteur, grouperParAuteur } from '../src/auteurs.js';
 
 describe('Reconnaitre qu-il s-agit du meme livre', () => {
   it('ignore la casse, les accents et la ponctuation', () => {

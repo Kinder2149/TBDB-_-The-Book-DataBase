@@ -13,129 +13,16 @@ import {
   rechercherAvecEtat, identifierResultat, getSuggestions, scanDisponible, scannerIsbn,
   creerOeuvreManuelle, setStatut,
 } from '../api.js';
-import { LIBELLES, STATUTS, classeStatut } from '../status.js';
+import { LIBELLES, STATUTS, classeStatut, ageLisible } from '../status.js';
+import { grouperParAuteur } from '../auteurs.js';
 import { notify } from '../notify.js';
 import SearchBar from '../components/SearchBar.jsx';
 import BookCard from '../components/BookCard.jsx';
 import Modal from '../components/Modal.jsx';
+import FicheResultat from '../components/FicheResultat.jsx';
+import MenuCategorie from '../components/MenuCategorie.jsx';
+import CreationManuelle from '../components/CreationManuelle.jsx';
 import Icon from '../components/Icon.jsx';
-
-/*
- * REGROUPEMENT PAR AUTEUR (retour d'usage 81). « La recherche par auteur me
- * donne des livres plutot qu'une liste d'auteurs et leurs oeuvres. »
- *
- * Une vraie liste d'auteurs a ete mesuree puis ECARTEE : Open Library est la
- * seule source qui en propose une (`/search/authors.json`) et elle met de
- * 3,8 a 51 SECONDES, en rendant des doublons (« BernarD Werber » et
- * « Bernard Werber » sont deux fiches distinctes). Google Books, lui, n'a
- * aucun point d'entree « auteurs ».
- *
- * Mais Google rend deja le nom de l'auteur avec chaque livre : le regroupement
- * se fait donc ICI, sur ce qu'on a deja, sans un seul appel de plus et sans
- * une seconde d'attente. L'auteur cherche vient en tete, les homonymes en
- * dessous — ce sont eux, et non le manque de liste, qui brouillaient l'ecran.
- */
-export function sansAccent(texte) {
-  return String(texte || '').toLowerCase().normalize('NFD')
-    // Meme precaution qu'en §books.js : les signes combinants s'ecrivent en
-    // echappement, jamais en caracteres bruts — ils sont invisibles, et une
-    // copie de fichier peut les avaler sans que rien ne le signale.
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/*
- * Cle de regroupement d'un auteur. Google Books n'a AUCUN identifiant
- * d'auteur : il n'a que des chaines, et il ecrit le meme ecrivain de
- * plusieurs facons. Constate sur appels reels :
- *   « Alexandre Dumas » / « Alexandre Dumas (père) » / « Alexandre Dumas (1802-1870) »
- *   « John Ronald Reuel Tolkien » / « J.R.R. Tolkien » / « Tolkien J.R.R. »
- *   « Herbert George Wells » / « H.G Wells » / « H. G. Wells, H. G. »
- * Deux formes sur quatre recherches testees : ce n'est pas un cas limite.
- *
- * La cle est « nom de famille + initiales des autres mots, dedoublonnees et
- * triees ». Deux choix, tous deux corriges apres mesure :
- *
- *  - Le nom de famille est le DERNIER mot de plus d'une lettre. Une premiere
- *    version prenait « le mot le plus long » : elle echouait sur « Herbert
- *    George Wells », ou le prenom est plus long que le nom, et laissait Wells
- *    en quatre groupes. Le dernier mot long marche aussi sur les inversions
- *    (« Tolkien J.R.R. »), ou les initiales suivent le nom.
- *  - Les initiales sont DEDOUBLONNEES : « Herbert George Wells H G » repete
- *    les memes initiales sous deux formes dans une seule chaine.
- *
- * LIMITE ASSUMEE : deux auteurs partageant nom de famille ET initiales se
- * retrouvent fusionnes (« Alexandre Dumas » et « André Dumas »). C'est un
- * ecran de recherche, pas un catalogue de bibliotheque ; les titres affiches
- * montrent immediatement si quelque chose detonne.
- */
-export function cleAuteur(nom) {
-  const propre = sansAccent(String(nom || '').replace(/\([^)]*\)/g, ' ').replace(/[.,]/g, ' '));
-  const mots = propre.split(' ').filter(Boolean);
-  if (mots.length === 0) return '';
-
-  const longs = mots.filter((m) => m.length > 1);
-  const famille = longs.length ? longs[longs.length - 1] : mots[mots.length - 1];
-
-  const initiales = [...new Set(
-    mots.filter((m) => m !== famille).map((m) => m[0]),
-  )].sort().join('');
-
-  return `${famille}|${initiales}`;
-}
-
-/* Le nom LISIBLE, pour juger de la proximite avec ce que l'utilisateur a tape.
- * La cle ci-dessus ne convient pas : « werber » ne se retrouve pas dans
- * « bernard|w ». */
-export function nomComparable(nom) {
-  return sansAccent(String(nom || '').replace(/\([^)]*\)/g, ' '));
-}
-
-export function grouperParAuteur(resultats, requete) {
-  const cherche = sansAccent(requete);
-  const groupes = new Map();
-
-  resultats.forEach((r) => {
-    const nom = (r.auteurs && r.auteurs[0]) || 'Auteur inconnu';
-    const cle = cleAuteur(nom);
-    if (!groupes.has(cle)) groupes.set(cle, { nom, livres: [] });
-    const g = groupes.get(cle);
-    // Entre deux ecritures du meme auteur, on affiche la plus courte : c'est
-    // la forme canonique, celle sans les dates ni la mention entre
-    // parentheses. « Alexandre Dumas » plutot que « Alexandre Dumas (père) ».
-    if (nom.length < g.nom.length) g.nom = nom;
-    g.livres.push(r);
-  });
-
-  /* 3 = le nom demande exactement ; 2 = il le contient ; 1 = tous les mots y
-     sont (« werber » trouve « Bernard Werber ») ; 0 = un homonyme. */
-  const proximite = (nom) => {
-    const c = nomComparable(nom);
-    if (!cherche) return 0;
-    if (c === cherche) return 3;
-    if (c.includes(cherche)) return 2;
-    return cherche.split(' ').every((mot) => c.includes(mot)) ? 1 : 0;
-  };
-
-  return [...groupes.values()]
-    .map((g) => ({ ...g, proximite: proximite(g.nom) }))
-    .sort((a, b) => (b.proximite - a.proximite) || (b.livres.length - a.livres.length));
-}
-
-/*
- * « il y a 5 minutes » plutot qu'une date : ce qui compte pour l'utilisateur
- * n'est pas QUAND la recherche a ete faite, mais a quel point elle est vieille.
- */
-export function ageLisible(pose) {
-  const minutes = Math.round((Date.now() - pose) / 60000);
-  if (minutes < 2) return 'de tout à l’heure';
-  if (minutes < 60) return `d’il y a ${minutes} minutes`;
-  const heures = Math.round(minutes / 60);
-  if (heures < 24) return heures === 1 ? 'd’il y a une heure' : `d’il y a ${heures} heures`;
-  const jours = Math.round(heures / 24);
-  return jours === 1 ? 'd’hier' : `d’il y a ${jours} jours`;
-}
 
 export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
   const [mode, setMode] = useState('titre');
@@ -326,6 +213,38 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
     />
   );
 
+  /*
+   * Ranger un resultat dans une categorie : on l'ajoute EN SILENCE (le message
+   * final dit deja tout), puis on lui pose son statut. `ajouterOeuvre` est
+   * idempotent, donc un livre deja suivi voit simplement son statut changer.
+   */
+  const rangerDansCategorie = useCallback(async (livre, statut) => {
+    setCategorieCible(null);
+    const oeuvreId = await onSuivre(livre, true);
+    if (!oeuvreId) return;
+    try {
+      await setStatut(oeuvreId, statut);
+      await onChangement();
+      notify(`« ${livre.titre} » — ${LIBELLES[statut]}.`, 'info');
+    } catch (e) {
+      notify(e.message);
+    }
+  }, [onSuivre, onChangement]);
+
+  const creerALaMain = useCallback(async () => {
+    try {
+      await creerOeuvreManuelle({
+        ...saisie,
+        nbPages: saisie.nbPages ? Number(saisie.nbPages) : null,
+      });
+      setSaisie(null);
+      await onChangement();
+      notify(`« ${saisie.titre.trim()} » est dans ta bibliothèque.`, 'info');
+    } catch (e) {
+      notify(e.message);
+    }
+  }, [saisie, onChangement]);
+
   const dejaSuivi = ouvert ? editionsSuivies.has(ouvert.cleSource) : false;
 
   return (
@@ -486,59 +405,12 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
       ) : null}
 
       {saisie && (
-        <Modal
-          titre="Ajouter un livre à la main"
+        <CreationManuelle
+          saisie={saisie}
+          onChange={(champ, valeur) => setSaisie((v) => ({ ...v, [champ]: valeur }))}
+          onValider={creerALaMain}
           onFermer={() => setSaisie(null)}
-          actions={(
-            <>
-              <button type="button" className="btn btn--fantome" onClick={() => setSaisie(null)}>
-                Annuler
-              </button>
-              <button
-                type="button"
-                className="btn btn--primaire"
-                onClick={async () => {
-                  try {
-                    await creerOeuvreManuelle({
-                      ...saisie,
-                      nbPages: saisie.nbPages ? Number(saisie.nbPages) : null,
-                    });
-                    setSaisie(null);
-                    await onChangement();
-                    notify(`« ${saisie.titre.trim()} » est dans ta bibliothèque.`, 'info');
-                  } catch (e) {
-                    notify(e.message);
-                  }
-                }}
-              >
-                Ajouter
-              </button>
-            </>
-          )}
-        >
-          <p className="hint">
-            Seul le titre est obligatoire. Le reste se complète depuis la fiche,
-            quand tu veux.
-          </p>
-          {[
-            ['titre', 'Titre du livre'],
-            ['auteurs', 'Auteur'],
-            ['annee', 'Année'],
-            ['isbn13', 'ISBN (facultatif)'],
-            ['nbPages', 'Nombre de pages'],
-          ].map(([champ, libelle]) => (
-            <input
-              key={champ}
-              className="champ__saisie champ__saisie--encadre"
-              value={saisie[champ]}
-              onChange={(e) => setSaisie((v) => ({ ...v, [champ]: e.target.value }))}
-              placeholder={libelle}
-              aria-label={libelle}
-              inputMode={champ === 'annee' || champ === 'nbPages' || champ === 'isbn13' ? 'numeric' : 'text'}
-              autoFocus={champ === 'titre'}
-            />
-          ))}
-        </Modal>
+        />
       )}
 
       {/*
@@ -547,106 +419,22 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
         fiche n'etait pas une etape utile, c'etait un passage oblige.
       */}
       {categorieCible && (
-        <Modal titre={categorieCible.titre} onFermer={() => setCategorieCible(null)}>
-          <p className="hint">Dans quelle catégorie veux-tu le ranger ?</p>
-          <div className="statuts">
-            {STATUTS.map((st) => (
-              <button
-                key={st}
-                type="button"
-                className={`statbtn ${classeStatut(st)}`}
-                onClick={async () => {
-                  const livre = categorieCible;
-                  setCategorieCible(null);
-                  const oeuvreId = await onSuivre(livre, true);
-                  if (!oeuvreId) return;
-                  try {
-                    await setStatut(oeuvreId, st);
-                    await onChangement();
-                    notify(`« ${livre.titre} » — ${LIBELLES[st]}.`, 'info');
-                  } catch (e) {
-                    notify(e.message);
-                  }
-                }}
-              >
-                <span className="statbtn__led" />
-                <span>{LIBELLES[st]}</span>
-              </button>
-            ))}
-          </div>
-        </Modal>
+        <MenuCategorie
+          titre={categorieCible.titre}
+          onFermer={() => setCategorieCible(null)}
+          onChoisir={(st) => rangerDansCategorie(categorieCible, st)}
+        />
       )}
 
       {ouvert && (
-        <Modal
-          titre={ouvert.titre}
+        <FicheResultat
+          resultat={ouvert}
+          identite={identite}
+          dejaSuivi={dejaSuivi}
+          ajoutEnCours={ajoutEnCours}
+          onSuivre={suivre}
           onFermer={fermer}
-          actions={(
-            <>
-              <button type="button" className="btn btn--fantome" onClick={fermer}>Fermer</button>
-              <button
-                type="button"
-                className="btn btn--primaire"
-                onClick={suivre}
-                disabled={dejaSuivi || ajoutEnCours}
-              >
-                <Icon name={dejaSuivi ? 'valider' : 'plus'} size={18} />
-                <span>{dejaSuivi ? 'Déjà suivi' : (ajoutEnCours ? 'Ajout…' : 'Suivre')}</span>
-              </button>
-            </>
-          )}
-        >
-          {ouvert.sousTitre ? <p className="fiche__sous-titre">{ouvert.sousTitre}</p> : null}
-
-          <div className="fiche__lignes">
-            <div className="fiche__ligne">
-              <span>Auteurs</span>
-              <b>{ouvert.auteurs.join(', ') || 'inconnus'}</b>
-            </div>
-            <div className="fiche__ligne">
-              <span>Parution</span>
-              <b>{ouvert.datePublication || 'inconnue'}</b>
-            </div>
-            <div className="fiche__ligne">
-              <span>Éditeur</span>
-              <b>{ouvert.editeur || 'inconnu'}</b>
-            </div>
-            <div className="fiche__ligne">
-              <span>ISBN</span>
-              <b>{ouvert.isbn13 || ouvert.isbn10 || 'aucun'}</b>
-            </div>
-          </div>
-
-          <div className={`identite${identite && identite.resolue ? ' identite--ok' : ''}`}>
-            {identite === null ? (
-              <p className="hint">Identification chez Open Library…</p>
-            ) : (
-              <>
-                <div className="identite__tete">
-                  <Icon name={identite.resolue ? 'valider' : 'alerte'} size={18} />
-                  <b>{identite.resolue ? 'Œuvre identifiée' : 'Identification incomplète'}</b>
-                </div>
-                <p className="identite__cle">{identite.oeuvreId}</p>
-                <p className="identite__detail">
-                  {identite.resolue
-                    ? 'Open Library a reconnu ce texte : ses autres éditions pourront le rejoindre.'
-                    : 'Ce livre entrera quand même, sous une identité locale. Tu pourras le rattacher à une œuvre existante depuis sa fiche.'}
-                </p>
-                {identite.nbPages ? (
-                  <p className="identite__detail">Pagination retenue : {identite.nbPages} pages.</p>
-                ) : null}
-                {identite.cycleNom ? (
-                  <p className="identite__detail">
-                    Cycle : {identite.cycleNom}
-                    {identite.cycleTome ? `, tome ${identite.cycleTome}` : ''}
-                  </p>
-                ) : null}
-              </>
-            )}
-          </div>
-
-          {ouvert.resume ? <p className="fiche__resume">{ouvert.resume}</p> : null}
-        </Modal>
+        />
       )}
     </section>
   );

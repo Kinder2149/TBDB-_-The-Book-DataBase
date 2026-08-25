@@ -1417,10 +1417,51 @@ prouvé.
 | 93 | `createListe()` rend le **nom** de la liste, alors que `addToListe()` et `deleteListe()` attendent un **identifiant** | Incohérence relevée, non corrigée : aucun écran n'en souffre, et la changer toucherait la façade. Notée ici pour ne pas être redécouverte |
 | 94 | Cinq fonctions de `Recherche.jsx` n'étaient pas exportées, donc invérifiables | Exportées **sans être déplacées** — le découpage du fichier viendra ensuite, avec ces vérifications pour filet |
 
-**Dette reconnue et datée** : `Recherche.jsx` est à **653 lignes**, quand §2.2
-justifie son existence même par le reproche fait au projet séries d'un
-`App.jsx` à 656 lignes. Les tranches 10 et 11 l'ont fait grossir. Le découpage
-est la prochaine tranche, désormais couverte par les vérifications.
+**Dette reconnue et datée** : `Recherche.jsx` était à **653 lignes**, quand
+§2.2 justifie son existence même par le reproche fait au projet séries d'un
+`App.jsx` à 656 lignes. Les tranches 10 et 11 l'ont fait grossir. **Traité en
+tranche 15, ci-dessous.**
+
+---
+
+### Tranche 15 — 2026-08-25 : le découpage, sous filet
+
+Fait **après** les vérifications et non avant : c'était le sens de l'ordre
+choisi. Les 75 vérifications ont été relancées à chaque étape, et l'écran
+réellement manipulé dans le navigateur — elles ne couvrent pas le rendu.
+
+| Fichier | Avant | Après |
+|---|---|---|
+| `screens/Recherche.jsx` | **653** | **441** |
+| `App.jsx` | 334 | **274** — sous la cible de 300 de §2.2, pour la première fois |
+
+**Cinq modules nés de ce découpage**, tous prévus ou justifiés :
+
+| Nouveau | Contenu | Pourquoi |
+|---|---|---|
+| `auteurs.js` | `sansAccent`, `cleAuteur`, `nomComparable`, `grouperParAuteur` | Fonctions **pures** — aucun état, aucun rendu, aucun réseau. Elles n'avaient rien à faire dans un composant |
+| `screens/Reglages.jsx` | profil, affichage, données, quota, diagnostic | **Prévu par §2.2 depuis le premier jour**, jamais extrait |
+| `components/FicheResultat.jsx` | la fiche d'un livre trouvé, avant ajout | 92 lignes de présentation pure |
+| `components/CreationManuelle.jsx` | créer un livre qu'aucun catalogue ne connaît | 58 lignes |
+| `components/MenuCategorie.jsx` | le choix de catégorie sur appui long | 35 lignes |
+
+`ageLisible()` rejoint `status.js`, qui rassemblait déjà les règles d'affichage
+dérivées (`enHeures`, `libelleProgression`).
+
+Deux actions qui vivaient **dans le JSX** — créer un livre à la main, ranger un
+résultat dans une catégorie — sont devenues des fonctions nommées
+(`creerALaMain`, `rangerDansCategorie`). Une fonction anonyme de trente lignes
+au milieu d'un `onClick` ne se relit pas, et ne se teste pas.
+
+**Vérifié dans le navigateur après découpage** : recherche (20 livres), fiche
+(4 lignes + bloc identité), appui long (les 4 catégories), création manuelle
+**enregistrée en base puis retirée**, bascule de thème, compteur de quota.
+Aucune erreur JavaScript.
+
+**Reste à surveiller** : `store.js` à 807 lignes est désormais le plus gros
+fichier du projet. Il n'a pas grossi récemment et reste cohérent — un seul
+sujet, le SQL — mais c'est le prochain sur la liste si le besoin s'en fait
+sentir.
 
 ---
 
