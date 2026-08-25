@@ -35,7 +35,7 @@ import Icon from '../components/Icon.jsx';
  * une seconde d'attente. L'auteur cherche vient en tete, les homonymes en
  * dessous — ce sont eux, et non le manque de liste, qui brouillaient l'ecran.
  */
-function sansAccent(texte) {
+export function sansAccent(texte) {
   return String(texte || '').toLowerCase().normalize('NFD')
     // Meme precaution qu'en §books.js : les signes combinants s'ecrivent en
     // echappement, jamais en caracteres bruts — ils sont invisibles, et une
@@ -70,7 +70,7 @@ function sansAccent(texte) {
  * ecran de recherche, pas un catalogue de bibliotheque ; les titres affiches
  * montrent immediatement si quelque chose detonne.
  */
-function cleAuteur(nom) {
+export function cleAuteur(nom) {
   const propre = sansAccent(String(nom || '').replace(/\([^)]*\)/g, ' ').replace(/[.,]/g, ' '));
   const mots = propre.split(' ').filter(Boolean);
   if (mots.length === 0) return '';
@@ -88,11 +88,11 @@ function cleAuteur(nom) {
 /* Le nom LISIBLE, pour juger de la proximite avec ce que l'utilisateur a tape.
  * La cle ci-dessus ne convient pas : « werber » ne se retrouve pas dans
  * « bernard|w ». */
-function nomComparable(nom) {
+export function nomComparable(nom) {
   return sansAccent(String(nom || '').replace(/\([^)]*\)/g, ' '));
 }
 
-function grouperParAuteur(resultats, requete) {
+export function grouperParAuteur(resultats, requete) {
   const cherche = sansAccent(requete);
   const groupes = new Map();
 
@@ -127,7 +127,7 @@ function grouperParAuteur(resultats, requete) {
  * « il y a 5 minutes » plutot qu'une date : ce qui compte pour l'utilisateur
  * n'est pas QUAND la recherche a ete faite, mais a quel point elle est vieille.
  */
-function ageLisible(pose) {
+export function ageLisible(pose) {
   const minutes = Math.round((Date.now() - pose) / 60000);
   if (minutes < 2) return 'de tout à l’heure';
   if (minutes < 60) return `d’il y a ${minutes} minutes`;

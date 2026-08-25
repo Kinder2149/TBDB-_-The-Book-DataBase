@@ -1387,6 +1387,43 @@ pas été capturés. Les corrections ci-dessus traitent les **conséquences** de
 cet arrêt, qui étaient bien réelles et bloquantes ; elles n'en traitent pas la
 cause. Si l'arrêt se reproduit, c'est cette cause-là qu'il faudra chercher.
 
+---
+
+### Tranche 14 — 2026-08-25 : des vérifications automatiques, enfin
+
+Le projet comptait **6 161 lignes et zéro test**. Trois familles ont été
+écrites, **75 vérifications**, qui tournent en **15 secondes** par `npm test`.
+
+| Famille | Ce qu'elle protège | Nombre |
+|---|---|---|
+| 1. Règles métier | empreintes d'œuvre, dates Open Library, cycles, code-barres, progression, regroupement par auteur, âge des archives | 33 |
+| 2. Base de données | migrations, clés étrangères, ajout sans doublon, éditions multiples, promotion d'identité, listes, cloisonnement des profils | 19 |
+| 3. Résistance aux pannes | réessais 503, refus de réessayer un 429, quota, normalisation Google, archive hors ligne, cache des identifications ratées, cache journalier des suggestions | 23 |
+
+**Choix : aucun appel réseau réel.** Des vérifications dépendant de l'humeur de
+Google échoueraient au hasard 25 à 40 % du temps, consommeraient le quota, et
+ne permettraient plus de distinguer un défaut d'une panne passagère. Un script
+séparé, `npm run controle-sources`, interroge les vraies sources à la demande
+et rend un verdict lisible — il vérifie aussi que **la clé Google est bien
+restreinte à la seule Books API**.
+
+**La base tourne pour de vrai** (sql.js en mémoire, le moteur du navigateur) :
+seul le chemin du fichier `.wasm` est redirigé. Simuler la base n'aurait rien
+prouvé.
+
+| # | Ce que les vérifications ont trouvé | Correction |
+|---|---|---|
+| 92 | **Bug réel, trouvé par la toute première campagne** : `progressionDe()` rendait **-2 %** sur une position négative — le repli en pourcentage bornait à 0, le calcul normal non. `setPosition` interdit les valeurs négatives, mais **une sauvegarde restaurée n'est pas filtrée** : la donnée peut entrer par là | Bornage par le bas ajouté |
+| 93 | `createListe()` rend le **nom** de la liste, alors que `addToListe()` et `deleteListe()` attendent un **identifiant** | Incohérence relevée, non corrigée : aucun écran n'en souffre, et la changer toucherait la façade. Notée ici pour ne pas être redécouverte |
+| 94 | Cinq fonctions de `Recherche.jsx` n'étaient pas exportées, donc invérifiables | Exportées **sans être déplacées** — le découpage du fichier viendra ensuite, avec ces vérifications pour filet |
+
+**Dette reconnue et datée** : `Recherche.jsx` est à **653 lignes**, quand §2.2
+justifie son existence même par le reproche fait au projet séries d'un
+`App.jsx` à 656 lignes. Les tranches 10 et 11 l'ont fait grossir. Le découpage
+est la prochaine tranche, désormais couverte par les vérifications.
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1402,7 +1439,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **91 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **94 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

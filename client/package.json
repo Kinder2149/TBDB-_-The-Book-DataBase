@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "wasm": "node -e \"require('fs').copyFileSync('node_modules/sql.js/dist/sql-wasm.wasm','public/assets/sql-wasm.wasm')\"",
-    "android": "npm run build && npx cap sync android"
+    "android": "npm run build && npx cap sync android",
+    "test": "vitest run",
+    "test:suivi": "vitest",
+    "controle-sources": "node tests/controle-sources.js"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.1.1",
@@ -26,6 +29,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
     "@vitejs/plugin-react": "^4.7.0",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^3.2.7"
   }
 }

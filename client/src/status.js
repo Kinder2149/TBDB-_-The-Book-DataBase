@@ -74,7 +74,15 @@ export function progressionDe(oeuvre) {
     unite: audio ? 'minute' : 'page',
     total,
     position,
-    pourcent: Math.min(100, Math.round((position / total) * 100)),
+    /*
+     * Borne PAR LE BAS autant que par le haut. Trouve par le premier jeu de
+     * verifications (2026-08-25) : le repli en pourcentage ci-dessus bornait
+     * bien a 0, celui-ci non — une position negative rendait « -2 % » et une
+     * barre de progression a l'envers. `setPosition` interdit deja les
+     * valeurs negatives, mais une sauvegarde restauree, elle, n'est pas
+     * filtree : la donnee peut entrer par la.
+     */
+    pourcent: Math.min(100, Math.max(0, Math.round((position / total) * 100))),
     metriqueConnue: true,
   };
 }
