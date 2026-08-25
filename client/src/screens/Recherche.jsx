@@ -16,6 +16,7 @@ import {
 } from '../api.js';
 import { LIBELLES, STATUTS, classeStatut, ageLisible } from '../status.js';
 import { grouperParAuteur } from '../auteurs.js';
+import { separerLesTomes } from '../tomes.js';
 import { notify } from '../notify.js';
 import SearchBar from '../components/SearchBar.jsx';
 import BookCard from '../components/BookCard.jsx';
@@ -64,6 +65,20 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
    * question « de qui ? » se pose. En Titre ou ISBN, regrouper n'aurait aucun
    * sens — on cherche une oeuvre precise, pas une bibliographie.
    */
+  /*
+   * Une SERIE detectee dans les resultats (retour d'usage 101). Les tomes
+   * arrivent de Google dans un desordre complet — mesure sur « La Quete
+   * d'Ewilan » : 1, 2, 7, 5, 3 melanges a des resultats sans numero. Les
+   * remettre dans l'ordre est ce qui rend une saga visible.
+   * Jamais en mode Auteur, ou le regroupement par ecrivain prime.
+   */
+  const serie = useMemo(
+    () => (mode !== 'auteur' && resultats.length > 0
+      ? separerLesTomes(resultats)
+      : { tomes: [], autres: resultats }),
+    [mode, resultats],
+  );
+
   const groupes = useMemo(
     () => (mode === 'auteur' && resultats.length > 0
       ? grouperParAuteur(resultats, derniereRequete)
@@ -246,10 +261,11 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
 
   /* Une seule definition de la carte de resultat : la grille simple et les
      grilles par auteur doivent rester identiques a la virgule pres. */
-  const carteResultat = (r) => (
+  const carteResultat = (r, mention) => (
     <BookCard
       key={r.cleSource}
       resultat={r}
+      raison={mention}
       marque={editionsSuivies.has(r.cleSource)}
       onOuvrir={ouvrir}
       onAppuiLong={() => setCategorieCible(r)}
@@ -477,6 +493,22 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
             </div>
           </div>
         ))
+      ) : serie.tomes.length > 0 ? (
+        <>
+          <h2 className="soustitre soustitre--serre">
+            La série, dans l’ordre
+            <span className="groupe-auteur__compte">{serie.tomes.length} tomes</span>
+          </h2>
+          <div className="grille">
+            {serie.tomes.map((r) => carteResultat(r, `tome ${r.tome}`))}
+          </div>
+          {serie.autres.length > 0 && (
+            <>
+              <h2 className="soustitre">Autres résultats</h2>
+              <div className="grille">{serie.autres.map((r) => carteResultat(r))}</div>
+            </>
+          )}
+        </>
       ) : resultats.length > 0 ? (
         <div className="grille">{resultats.map((r) => carteResultat(r))}</div>
       ) : null}

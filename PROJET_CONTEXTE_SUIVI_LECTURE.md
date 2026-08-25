@@ -1532,6 +1532,33 @@ plante.
 | 101 | « J'ai une saga de 5 tomes à la maison, il n'en voit qu'un » | Google annonce jusqu'à **300 résultats** et l'application n'en montrait que **20**, sans pagination ni indication. Sur « Le Trône de fer », la première page rend les tomes 1, 2, 3, 5, 6, 7, 8, 9, 11 à 15 — les autres étaient **hors de portée** | Bouton **« Voir plus de livres »**, qui ajoute la page suivante à la suite sans remplacer l'existant, et écarte les doublons. Vérifié : 20 → 40 livres. Jamais propose en mode ISBN — un ISBN désigne un livre |
 | 102 | « Google Books me dit parfois qu'il fonctionne pas » | **Réel, et extérieur à l'application.** Contrôle du 25/08 à 21 h : Google ne répond qu'**1 fois sur 6**. À ce taux, les six essais laissent encore environ une recherche sur trois en échec | Rien à corriger dans le code : le réessai, l'archive hors ligne et le bouton « Réessayer » sont déjà en place. `npm run controle-sources` permet de distinguer une panne de source d'un défaut de l'application |
 
+**La vraie cause du « il n'en voit qu'un »** — trouvée après que Kinder a
+précisé qu'il cherchait **par titre**. Les tomes ne manquaient pas : ils
+arrivaient **dans un désordre complet**, noyés parmi des résultats sans
+numéro. Ordre réellement rendu par Google pour « La Quête d'Ewilan » :
+
+```
+- 1 - - - 2 3 1 - 5 2 7 - 6 - 2 - - 7 4
+```
+
+Personne ne peut lire une série là-dedans. C'était un problème de
+**présentation**, pas de catalogue.
+
+D'où `tomes.js` : `numeroDeTome()` et `separerLesTomes()`, fonctions pures.
+L'écran affiche désormais **« La série, dans l'ordre »** puis « Autres
+résultats ». Vérifié sur deux sagas réelles :
+
+| Recherche | Avant | Après |
+|---|---|---|
+| La Quête d'Ewilan | 1, 2, 7, 5, 3 mêlés à 13 sans numéro | **12 tomes ordonnés** |
+| Le Trône de fer | 3, 1, 7, 6, 15, 14, 5… | **16 tomes ordonnés** |
+
+**Règle la plus importante de ce module : ne JAMAIS inventer un tome.** Un
+numéro doit être annoncé par un mot (tome, T., livre, volume) ou des
+parenthèses finales. Sans cette exigence, « 1984 » deviendrait le tome 1984.
+Et en dessous de **trois** tomes distincts, rien n'est réorganisé : deux
+livres numérotés peuvent n'avoir aucun rapport.
+
 **Hypothèse testée puis ÉCARTÉE** : `langRestrict=fr` soupçonné de faire
 disparaître des sagas entières. Une première mesure semblait le confirmer
 (« La Roue du Temps » → 0 résultat), mais c'était un **503 déguisé** : le code
@@ -1556,7 +1583,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **102 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **103 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

@@ -934,6 +934,7 @@ button { font: inherit; color: inherit; }
   display: flex; align-items: baseline; justify-content: space-between;
   gap: .5rem; margin-bottom: .5rem;
 }
+.soustitre .groupe-auteur__compte { margin-left: .5rem; }
 .groupe-auteur__compte {
   flex: 0 0 auto; font-size: .78rem; font-weight: 400; color: var(--muted);
 }
