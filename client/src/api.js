@@ -99,8 +99,17 @@ export async function rechercher(texte, mode) {
  * simple ci-dessus.
  * @returns {Promise<{resultats: ResultatRecherche[], ancien: boolean, pose: number|null}>}
  */
-export async function rechercherAvecEtat(texte, mode) {
-  return books.rechercher(texte, mode);
+export async function rechercherAvecEtat(texte, mode, page = 0) {
+  return books.rechercher(texte, mode, page);
+}
+
+/* Les dernieres recherches, pour les reproposer (retour d'usage 100). */
+export async function getHistoriqueRecherches() {
+  return books.historiqueRecherches();
+}
+
+export async function effacerHistoriqueRecherches() {
+  return books.oublierHistorique();
 }
 
 /**

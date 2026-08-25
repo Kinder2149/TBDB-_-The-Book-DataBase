@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   rechercherAvecEtat, identifierResultat, getSuggestions, scanDisponible, scannerIsbn,
+  getHistoriqueRecherches, effacerHistoriqueRecherches,
   creerOeuvreManuelle, setStatut,
 } from '../api.js';
 import { LIBELLES, STATUTS, classeStatut, ageLisible } from '../status.js';
@@ -38,6 +39,10 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
   const [derniereRequete, setDerniereRequete] = useState('');
   // Livre sur lequel on vient de faire un appui long, pour choisir sa categorie.
   const [categorieCible, setCategorieCible] = useState(null);
+  const [page, setPage] = useState(0);            // page de resultats deja chargee
+  const [encoreDesResultats, setEncoreDesResultats] = useState(false);
+  const [chargeSuite, setChargeSuite] = useState(false);
+  const [historique, setHistorique] = useState([]);
   const [suggestions, setSuggestions] = useState(null);
   const [suggestionsEnCours, setSuggestionsEnCours] = useState(false);
   const [scanPossible, setScanPossible] = useState(false);
@@ -47,6 +52,12 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
   // Une seule interrogation de l'appareil, au montage : la camera ne change
   // pas d'avis en cours de route.
   useEffect(() => { scanDisponible().then(setScanPossible).catch(() => setScanPossible(false)); }, []);
+
+  /* Les dernieres recherches, reproposees sur l'ecran d'accueil (§retour 100). */
+  const relireHistorique = useCallback(() => {
+    getHistoriqueRecherches().then(setHistorique).catch(() => setHistorique([]));
+  }, []);
+  useEffect(() => { relireHistorique(); }, [relireHistorique]);
 
   /*
    * Les groupes ne se calculent qu'en mode Auteur : c'est le seul mode ou la
@@ -95,8 +106,16 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
       const { resultats: trouves, ancien, pose } = await rechercherAvecEtat(texte, modeCourant);
       if (seq !== sequence.current) return;   // une frappe plus récente a gagné
       setResultats(trouves);
+      setPage(0);
+      /*
+       * Une page pleine signifie qu'il y en a probablement d'autres : Google
+       * annonce jusqu'a 300 resultats. On ne propose « Voir plus » que dans ce
+       * cas, et jamais en mode ISBN — un ISBN designe UN livre.
+       */
+      setEncoreDesResultats(trouves.length >= 20 && modeCourant !== 'isbn');
       setPoseArchive(ancien ? pose : null);
       setEtat('fait');
+      relireHistorique();
     } catch (e) {
       if (seq !== sequence.current) return;
       setEtat('erreur');
@@ -107,7 +126,7 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
       setMessageErreur(e.message);
       notify(e.message);
     }
-  }, []);
+  }, [relireHistorique]);
 
   /*
    * §4.6 point 6 : les suggestions sont calculees A LA DEMANDE, jamais au
@@ -158,6 +177,32 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
       notify(e.message);
     }
   }, []);
+
+  /*
+   * « Voir plus » — retour d'usage 101 : « j'ai une saga de 5 tomes a la
+   * maison, il n'en voit qu'un ». Google annonce jusqu'a 300 resultats et
+   * l'application n'en montrait que 20 : les tomes suivants etaient hors de
+   * portee, sans que rien ne l'indique. Les pages s'ajoutent a la suite, on ne
+   * remplace jamais ce qui est deja affiche.
+   */
+  const chargerLaSuite = useCallback(async () => {
+    const d = derniere.current;
+    if (!d || chargeSuite) return;
+    setChargeSuite(true);
+    try {
+      const suivante = page + 1;
+      const { resultats: encore } = await rechercherAvecEtat(d.texte, d.mode, suivante);
+      const connus = new Set(resultats.map((r) => r.cleSource));
+      const nouveaux = encore.filter((r) => !connus.has(r.cleSource));
+      setResultats((avant) => [...avant, ...nouveaux]);
+      setPage(suivante);
+      setEncoreDesResultats(encore.length >= 20);
+    } catch (e) {
+      notify(e.message);
+    } finally {
+      setChargeSuite(false);
+    }
+  }, [page, resultats, chargeSuite]);
 
   const ouvrir = useCallback(async (resultat) => {
     setOuvert(resultat);
@@ -220,12 +265,11 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
    */
   const rangerDansCategorie = useCallback(async (livre, statut) => {
     setCategorieCible(null);
-    const oeuvreId = await onSuivre(livre, true);
+    const oeuvreId = await onSuivre(livre);
     if (!oeuvreId) return;
     try {
       await setStatut(oeuvreId, statut);
       await onChangement();
-      notify(`« ${livre.titre} » — ${LIBELLES[statut]}.`, 'info');
     } catch (e) {
       notify(e.message);
     }
@@ -239,7 +283,6 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
       });
       setSaisie(null);
       await onChangement();
-      notify(`« ${saisie.titre.trim()} » est dans ta bibliothèque.`, 'info');
     } catch (e) {
       notify(e.message);
     }
@@ -317,6 +360,40 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
             Tape un titre, un nom d’auteur, ou les chiffres de l’ISBN au dos du
             livre.
           </p>
+
+          {/*
+            Retour d'usage 100 : « je ne vois pas mon historique de recherche ».
+            Les douze dernieres, les plus recentes en tete. Toucher l'une
+            d'elles la relance — c'est ce qui evite de retaper un titre long
+            sur un clavier de telephone.
+          */}
+          {historique.length > 0 && (
+            <>
+              <div className="suggestions__tete">
+                <h2 className="soustitre soustitre--serre">Tes dernières recherches</h2>
+                <button
+                  type="button"
+                  className="btn btn--fantome"
+                  onClick={async () => { await effacerHistoriqueRecherches(); relireHistorique(); }}
+                >
+                  <span>Effacer</span>
+                </button>
+              </div>
+              <div className="historique">
+                {historique.map((h) => (
+                  <button
+                    key={`${h.mode}:${h.texte}`}
+                    type="button"
+                    className="historique__item"
+                    onClick={() => { changerMode(h.mode); lancer(h.texte, h.mode); }}
+                  >
+                    <Icon name="recherche" size={14} />
+                    <span>{h.texte}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="suggestions__tete">
             <h2 className="soustitre soustitre--serre">Pour toi</h2>
@@ -403,6 +480,18 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
       ) : resultats.length > 0 ? (
         <div className="grille">{resultats.map((r) => carteResultat(r))}</div>
       ) : null}
+
+      {encoreDesResultats && resultats.length > 0 && (
+        <button
+          type="button"
+          className="btn btn--large"
+          onClick={chargerLaSuite}
+          disabled={chargeSuite}
+        >
+          <Icon name="actualiser" size={16} />
+          <span>{chargeSuite ? 'Recherche…' : `Voir plus de livres (${resultats.length} affichés)`}</span>
+        </button>
+      )}
 
       {saisie && (
         <CreationManuelle

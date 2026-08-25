@@ -101,11 +101,11 @@ function normaliser(texte, couperSousTitre) {
  * @param {'titre'|'auteur'|'isbn'} mode
  * @returns {Promise<ResultatRecherche[]>}
  */
-export async function rechercher(texte, mode) {
+export async function rechercher(texte, mode, page = 0) {
   const requete = texte.trim();
   if (!requete) return { resultats: [], ancien: false, pose: null };
 
-  const cle = `${mode}:${requete.toLowerCase()}`;
+  const cle = `${mode}:${requete.toLowerCase()}${page ? `#${page}` : ''}`;
   const enCache = cacheRecherche.get(cle);
   if (enCache && Date.now() - enCache.pose < CACHE_TTL_MS) {
     return { resultats: enCache.resultats, ancien: false, pose: enCache.pose };
@@ -113,7 +113,7 @@ export async function rechercher(texte, mode) {
 
   let resultats;
   try {
-    resultats = await interroger(requete, mode);
+    resultats = await interroger(requete, mode, page);
   } catch (panne) {
     /*
      * ARCHIVE — le dernier recours, et le seul qui reste (tranche 10).
@@ -135,15 +135,16 @@ export async function rechercher(texte, mode) {
   cacheRecherche.set(cle, { pose, resultats: illustres });
   // Volontairement non attendu : archiver ne doit pas retarder l'affichage.
   if (illustres.length) void ecrireArchive(cle, pose, illustres);
+  if (illustres.length && page === 0) void noterDansHistorique(requete, mode);
   return { resultats: illustres, ancien: false, pose };
 }
 
 /* Le chemin reseau, inchange — extrait pour que `rechercher` ne fasse plus que
  * decider entre le vif, le cache et l'archive. */
-async function interroger(requete, mode) {
+async function interroger(requete, mode, page = 0) {
   let resultats;
   if (mode === 'auteur') {
-    resultats = await google.rechercherParAuteur(requete);
+    resultats = await google.rechercherParAuteur(requete, page);
   } else if (mode === 'isbn') {
     const chiffres = requete.replace(/[^0-9Xx]/g, '');
     /*
@@ -179,7 +180,7 @@ async function interroger(requete, mode) {
     // livre n'existe pas.
     if (resultats.length === 0 && panneGoogle) throw panneGoogle;
   } else {
-    resultats = await google.rechercherParTitre(requete);
+    resultats = await google.rechercherParTitre(requete, page);
   }
 
   return resultats;
@@ -208,6 +209,40 @@ async function lireArchive(cle) {
   } catch {
     return null;   // IndexedDB indisponible : on n'a simplement pas de filet
   }
+}
+
+/*
+ * HISTORIQUE DES RECHERCHES (retour d'usage 100 : « je ne vois pas mon
+ * historique de recherche »). Douze entrees au plus, les plus recentes en
+ * tete, sans doublon. C'est une commodite, pas une donnee du profil : elle vit
+ * a cote de l'archive et ne part pas dans la sauvegarde.
+ */
+const CLE_HISTORIQUE = 'historiqueRecherches';
+const MAX_HISTORIQUE = 12;
+
+export async function historiqueRecherches() {
+  try {
+    const { get } = await import('idb-keyval');
+    return (await get(CLE_HISTORIQUE)) || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function oublierHistorique() {
+  try {
+    const { del } = await import('idb-keyval');
+    await del(CLE_HISTORIQUE);
+  } catch { /* rien a oublier */ }
+}
+
+async function noterDansHistorique(texte, mode) {
+  try {
+    const { get, set } = await import('idb-keyval');
+    const avant = (await get(CLE_HISTORIQUE)) || [];
+    const sansDoublon = avant.filter((e) => !(e.mode === mode && e.texte === texte));
+    await set(CLE_HISTORIQUE, [{ texte, mode, pose: Date.now() }, ...sansDoublon].slice(0, MAX_HISTORIQUE));
+  } catch { /* l'historique n'est jamais une raison d'echouer */ }
 }
 
 async function ecrireArchive(cle, pose, resultats) {

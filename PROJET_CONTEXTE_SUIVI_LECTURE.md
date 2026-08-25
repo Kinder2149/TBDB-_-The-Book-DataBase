@@ -1521,6 +1521,26 @@ plante.
 
 ---
 
+---
+
+### Tranche 17 — 2026-08-25 : cinq retours d'usage (suite)
+
+| # | Symptôme | Ce que la mesure a dit | Correction |
+|---|---|---|---|
+| 99 | « Quand j'ajoute un livre j'ai une notification, j'en veux pas » | — | **Aucun message à l'ajout.** Le retour visuel existe déjà : la carte se marque. Un bandeau qui annonce ce qu'on vient de faire soi-même n'apprend rien. Les **erreurs** continuent de parler |
+| 100 | « Je ne vois pas mon historique de recherche » | Il n'existait pas | Les **douze dernières recherches** en puces sur l'écran d'accueil, les plus récentes en tête, sans doublon. Toucher l'une d'elles la relance — c'est ce qui évite de retaper un titre long sur un clavier de téléphone. Bouton « Effacer » |
+| 101 | « J'ai une saga de 5 tomes à la maison, il n'en voit qu'un » | Google annonce jusqu'à **300 résultats** et l'application n'en montrait que **20**, sans pagination ni indication. Sur « Le Trône de fer », la première page rend les tomes 1, 2, 3, 5, 6, 7, 8, 9, 11 à 15 — les autres étaient **hors de portée** | Bouton **« Voir plus de livres »**, qui ajoute la page suivante à la suite sans remplacer l'existant, et écarte les doublons. Vérifié : 20 → 40 livres. Jamais propose en mode ISBN — un ISBN désigne un livre |
+| 102 | « Google Books me dit parfois qu'il fonctionne pas » | **Réel, et extérieur à l'application.** Contrôle du 25/08 à 21 h : Google ne répond qu'**1 fois sur 6**. À ce taux, les six essais laissent encore environ une recherche sur trois en échec | Rien à corriger dans le code : le réessai, l'archive hors ligne et le bouton « Réessayer » sont déjà en place. `npm run controle-sources` permet de distinguer une panne de source d'un défaut de l'application |
+
+**Hypothèse testée puis ÉCARTÉE** : `langRestrict=fr` soupçonné de faire
+disparaître des sagas entières. Une première mesure semblait le confirmer
+(« La Roue du Temps » → 0 résultat), mais c'était un **503 déguisé** : le code
+de test comptait `items` sans distinguer l'échec de l'absence. Vérification
+refaite avec 12 essais : `langRestrict=fr` rend autant de résultats que sans.
+Le coupable était la pagination, pas la langue.
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1536,7 +1556,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **98 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **102 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

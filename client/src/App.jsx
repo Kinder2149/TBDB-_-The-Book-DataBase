@@ -104,11 +104,18 @@ export default function App() {
    * statut. `ajouterOeuvre` est idempotent (INSERT OR IGNORE), donc un livre
    * deja suivi rend simplement sa cle existante.
    */
-  const suivre = useCallback(async (resultat, silencieux = false) => {
+  const suivre = useCallback(async (resultat) => {
     try {
       const oeuvreId = await ajouterOeuvre(resultat);
       await recharger();
-      if (!silencieux) notify(`« ${resultat.titre} » est dans ta bibliothèque.`, 'info');
+      /*
+       * AUCUN message a l'ajout (retour d'usage 99 : « quand j'ajoute un livre
+       * j'ai une notification qui apparait, j'en veux pas »). Le retour visuel
+       * existe deja et se suffit : la carte se marque d'une pastille, et le
+       * livre est dans la bibliotheque. Un bandeau qui recouvre l'ecran pour
+       * annoncer ce qu'on vient de faire soi-meme n'apprend rien.
+       * Les ERREURS, elles, continuent de parler.
+       */
       return oeuvreId;
     } catch (e) {
       notify(`Impossible d'ajouter ce livre : ${e.message}`);

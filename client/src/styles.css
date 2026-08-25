@@ -956,3 +956,25 @@ button { font: inherit; color: inherit; }
   border-radius: .4rem; cursor: pointer;
 }
 .fiche__couverture-action svg { flex: 0 0 auto; }
+
+/*
+ * Historique des recherches : des puces, pas une liste verticale. Sur un
+ * telephone, douze lignes pleines occuperaient tout l'ecran d'accueil, alors
+ * que des puces se lisent d'un coup d'oeil et tiennent en trois rangees.
+ */
+.historique {
+  display: flex; flex-wrap: wrap; gap: .4rem;
+  margin-bottom: 1.25rem;
+}
+.historique__item {
+  display: inline-flex; align-items: center; gap: .35rem;
+  max-width: 100%;
+  padding: .35rem .6rem;
+  font-size: .8rem; color: var(--text);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 1rem; cursor: pointer;
+}
+.historique__item span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.historique__item svg { flex: 0 0 auto; color: var(--muted); }

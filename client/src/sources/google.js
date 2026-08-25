@@ -163,10 +163,18 @@ function normaliserVolume(item) {
   };
 }
 
-async function chercher(requete, options = {}) {
+/*
+ * `page` compte a partir de 0. Google pagine par `startIndex`, en nombre de
+ * resultats et non de pages — d'ou la multiplication. Ajoute apres le retour
+ * d'usage 101 : Google annonce jusqu'a 300 resultats et l'application n'en
+ * montrait que 20, sans aucun moyen d'aller plus loin. Sur une saga, les tomes
+ * manquants etaient simplement hors de portee.
+ */
+async function chercher(requete, options = {}, page = 0) {
   const donnees = await googleGet('/volumes', {
     q: requete,
     maxResults: MAX_RESULTATS,
+    ...(page > 0 ? { startIndex: page * MAX_RESULTATS } : {}),
     ...options,
   });
   if (!Array.isArray(donnees.items)) return [];
@@ -174,13 +182,13 @@ async function chercher(requete, options = {}) {
 }
 
 /** @returns {Promise<ResultatRecherche[]>} */
-export function rechercherParTitre(texte) {
-  return chercher(`intitle:${texte}`, { langRestrict: 'fr' });
+export function rechercherParTitre(texte, page = 0) {
+  return chercher(`intitle:${texte}`, { langRestrict: 'fr' }, page);
 }
 
 /** @returns {Promise<ResultatRecherche[]>} */
-export function rechercherParAuteur(texte) {
-  return chercher(`inauthor:"${texte}"`, { langRestrict: 'fr' });
+export function rechercherParAuteur(texte, page = 0) {
+  return chercher(`inauthor:"${texte}"`, { langRestrict: 'fr' }, page);
 }
 
 /** Découverte par sujet — sert aux suggestions (§4.6). */
