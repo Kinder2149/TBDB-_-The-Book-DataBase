@@ -9,6 +9,7 @@
 
 import * as google from './sources/google.js';
 import * as ol from './sources/openlibrary.js';
+import * as bnf from './sources/bnf.js';
 
 /** @typedef {import('./types.js').ResultatRecherche} ResultatRecherche */
 /** @typedef {import('./types.js').Identite} Identite */
@@ -116,6 +117,30 @@ export async function rechercher(texte, mode, page = 0) {
     resultats = await interroger(requete, mode, page);
   } catch (panne) {
     /*
+     * FILET BnF (tranche 19). Google n'est pas incomplet, il est INSTABLE :
+     * mesure du 2026-08-25, 4 recherches sur 6 abouties — et 1 sur 6 deux
+     * heures plus tot. Le catalogue de la Bibliotheque nationale, lui, a
+     * repondu 10 fois sur 10 puis 6 fois sur 6, sans cle ni quota.
+     *
+     * Il n'arrive qu'ICI, en repli, et jamais en premier : sa pertinence est
+     * franchement moins bonne — une recherche « germinal » y rend une revue
+     * de Lormont avant le roman de Zola — et il ne fournit ni couverture ni
+     * resume. Mieux vaut ses resultats que le message « Google Books est
+     * momentanement indisponible ».
+     */
+    if (mode !== 'isbn') {
+      try {
+        const secours = await interrogerBnf(requete, mode);
+        if (secours.length) {
+          const pose = Date.now();
+          const illustres = secours.map(avecCouvertureDeRepli);
+          cacheRecherche.set(cle, { pose, resultats: illustres });
+          return { resultats: illustres, ancien: false, pose };
+        }
+      } catch { /* la BnF non plus : on passe a l'archive */ }
+    }
+
+    /*
      * ARCHIVE — le dernier recours, et le seul qui reste (tranche 10).
      * Six essais laissent encore environ 4 % des recherches en echec, parce
      * que les 503 de Google arrivent en rafales (§4.7). Deux replis ont ete
@@ -137,6 +162,13 @@ export async function rechercher(texte, mode, page = 0) {
   if (illustres.length) void ecrireArchive(cle, pose, illustres);
   if (illustres.length && page === 0) void noterDansHistorique(requete, mode);
   return { resultats: illustres, ancien: false, pose };
+}
+
+/* Le repli BnF. Un seul appel, jamais de reessai : si elle ne repond pas,
+ * l'archive prend la suite. */
+async function interrogerBnf(requete, mode) {
+  if (mode === 'auteur') return bnf.rechercherParAuteur(requete);
+  return bnf.rechercherParTitre(requete);
 }
 
 /* Le chemin reseau, inchange — extrait pour que `rechercher` ne fasse plus que
@@ -173,6 +205,22 @@ async function interroger(requete, mode, page = 0) {
         const secours = await ol.livreParIsbn(chiffres);
         if (secours) resultats = [secours];
       } catch { /* Open Library injoignable aussi */ }
+    }
+
+    /*
+     * TROISIEME chance : la BnF (tranche 19). C'est le depot legal francais,
+     * donc le catalogue le plus complet pour un livre achete en France — et
+     * elle rattrape des ISBN que ni Google ni Open Library ne connaissent.
+     * Verifie : sur trois ISBN francais absents de Google, elle en trouve un,
+     * et elle repond aux trois ISBN de reference en 76 a 128 ms.
+     * Piege traite dans la source : elle indexe les livres anterieurs a 2007
+     * en ISBN-10, la conversion est faite la-bas.
+     */
+    if (resultats.length === 0) {
+      try {
+        const secours = await bnf.livreParIsbn(chiffres);
+        if (secours) resultats = [secours];
+      } catch { /* la BnF non plus */ }
     }
 
     // Les deux sources muettes ET Google en panne : c'est une panne, pas une

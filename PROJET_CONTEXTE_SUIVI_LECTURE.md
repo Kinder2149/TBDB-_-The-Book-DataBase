@@ -1599,6 +1599,59 @@ pas encore ouvert serait prématuré.
 
 ---
 
+---
+
+### Tranche 19 — 2026-08-26 : le choix des sources, remis en cause et arbitré
+
+Question posée : *« est-ce qu'on n'a pas mieux ? j'ai l'impression qu'il est
+limité, pas complet »*. Quatre sources mesurées sur les mêmes recherches.
+
+| Source | Fiabilité | Latence | Couvertures | Résumés | Quota | Clé |
+|---|---|---|---|---|---|---|
+| **Google Books** | **4/6** — et 1/6 deux heures plus tôt | 851 ms | **81 %** | oui | 1 000/j | oui |
+| **Open Library** | variable | **4 à 21 s** | **0 sur 15** | oui, en anglais | non | non |
+| **BnF (SRU)** | **10/10 puis 6/6** | 300–1 300 ms | non | non | **aucun** | **aucune** |
+| **Wikidata** | ok | **10,5 s** | non | non | non | non |
+
+**Le diagnostic corrige l'impression** : Google Books n'est pas *incomplet*, il
+est **instable**. Quand une recherche échoue, l'utilisateur conclut que le
+livre n'existe pas — alors qu'il est là.
+
+**Écartées** : Wikidata (10,5 s, résultats bruités — personnages et éditions
+norvégiennes), Goodreads (API fermée depuis 2020), Babelio (aucune API
+publique), ISBNdb / WorldCat / Electre (payants), Amazon (compte affilié).
+
+**Retenue : la BnF, en FILET et jamais en premier.** C'est le dépôt légal
+français — tout livre publié en France y figure par obligation légale — en
+HTTPS, avec `Access-Control-Allow-Origin: *`.
+
+| # | Point | Détail |
+|---|---|---|
+| 106 | Google tombe une fois sur trois et l'écran affichait une erreur | La BnF prend le relais **avant** l'archive. Vérifié, Google coupé à 100 % : « les fourmis » rend **20 livres, les bons**, en 3,8 s |
+| 107 | Des ISBN français qu'aucune source ne connaissait | Troisième chance à la BnF après Google et Open Library. Elle répond aux trois ISBN de référence en **76 à 128 ms**, et rattrape 1 des 3 que Google ignore |
+
+**Trois pièges, tous vérifiés sur appels réels :**
+
+1. **Elle contient tout le dépôt légal** — une recherche « asterix » rendait
+   des cassettes vidéo. D'où le filtre `bib.doctype any "a"` (texte imprimé).
+2. **Elle indexe les livres antérieurs à 2007 en ISBN-10.** Chercher
+   « 9782226052575 » ne rend **rien** ; « 2226052577 » rend *Les Fourmis*.
+   D'où `isbn13Vers10()`, avec recalcul de la clé de contrôle.
+3. **Sa pertinence est franchement moins bonne que Google** : « germinal » y
+   rend une revue de Lormont avant le roman de Zola, et « werber » en mode
+   auteur rend Gerson et Eva Bell Werber avant Bernard. **C'est la raison
+   pour laquelle elle reste un filet** — une vérification s'assure d'ailleurs
+   qu'elle n'est *pas* appelée quand Google répond.
+
+Le XML est lu **sans `DOMParser`** : il n'existe pas sous Node, où tournent les
+vérifications. Le format SRU est régulier, quelques expressions suffisent, et
+le code reste identique des deux côtés.
+
+**141 vérifications** (famille 8, 14 cas). `npm run controle-sources` teste
+désormais aussi le filet — sans consommer de quota, la BnF n'en ayant pas.
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1614,7 +1667,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **105 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **107 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

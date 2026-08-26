@@ -107,6 +107,26 @@ if (couv.statut === 200 || couv.statut === 302) {
   dire('alerte', 'Couvertures Open Library', `statut inattendu ${couv.statut}`);
 }
 
+// --- 6. Le filet BnF ---------------------------------------------------------
+// Il ne consomme aucun quota et ne demande aucune cle : on peut l'interroger
+// sans compter, contrairement a Google.
+let bnfOk = 0;
+for (const mot of ['dune', 'germinal', 'asterix']) {
+  const requete = `bib.title all "${mot}" and bib.doctype any "a"`;
+  const r = await mesurer(
+    'https://catalogue.bnf.fr/api/SRU?version=1.2&operation=searchRetrieve'
+    + `&recordSchema=dublincore&maximumRecords=5&query=${encodeURIComponent(requete)}`,
+  );
+  if (r.statut === 200) bnfOk += 1;
+}
+if (bnfOk === 3) {
+  dire('ok', 'Filet BnF', 'repond — il prendra le relais si Google tombe');
+} else if (bnfOk > 0) {
+  dire('alerte', 'Filet BnF', `${bnfOk}/3 seulement`);
+} else {
+  dire('echec', 'Filet BnF', 'injoignable — plus aucun secours si Google tombe');
+}
+
 console.log(lignes.join('\n'));
 console.log('');
 if (alertes === 0) {
