@@ -301,6 +301,51 @@ async function ecrireArchive(cle, pose, resultats) {
 }
 
 /**
+ * LES EDITIONS D'UN LIVRE — celles qu'on pourrait posseder (§3.1).
+ *
+ * Retour d'usage 109 : « j'aimerais que les editions associees s'affichent et
+ * qu'on puisse choisir celle qu'on a ». Jusqu'ici il fallait les CHERCHER a la
+ * main, une par une, en tapant leur titre.
+ *
+ * La BnF passe ICI EN PREMIER, contrairement a la recherche generale ou elle
+ * n'est qu'un filet. C'est le seul endroit ou elle est meilleure que Google, et
+ * la mesure est nette (2026-08-26) : « les fourmis » + « werber » y rend
+ * DOUZE editions francaises avec editeur, annee et ISBN — France Loisirs,
+ * Albin Michel, Livre de Poche… — en 1,3 s. C'est precisement la question
+ * qu'on lui pose : « quelles editions de ce texte existent en France ? »
+ * Google, lui, melange les tomes et les livres qui PARLENT de l'oeuvre.
+ *
+ * Open Library a ete mesure puis ecarte pour cet usage : /works/{id}/editions
+ * rend 161 a 252 editions en 7,5 a 8,4 s, toutes langues confondues — de
+ * l'italien, du portugais, du polonais, de l'hebreu. Inutilisable pour
+ * quelqu'un qui cherche l'exemplaire pose sur son etagere.
+ *
+ * @returns {Promise<ResultatRecherche[]>}
+ */
+export async function editionsDe(titre, auteur) {
+  const propre = String(titre || '').split(':')[0].trim();
+  if (!propre) return [];
+
+  let trouvees = [];
+  try {
+    trouvees = await bnf.rechercherEditions(propre, auteur);
+  } catch { /* la BnF ne repond pas : Google prendra le relais */ }
+
+  /*
+   * Repli Google — indispensable pour un livre etranger non traduit, dont la
+   * BnF n'a aucune trace.
+   */
+  if (trouvees.length === 0) {
+    try {
+      const requete = auteur ? `${propre} ${auteur}` : propre;
+      trouvees = await google.rechercherParTitre(requete);
+    } catch { /* aucune source : la fiche le dira */ }
+  }
+
+  return trouvees.map(avecCouvertureDeRepli);
+}
+
+/**
  * Résout l'identité d'œuvre d'un résultat (§3.2). Ne bloque JAMAIS : une
  * résolution impossible rend une empreinte locale, pas une erreur.
  * @param {ResultatRecherche} resultat

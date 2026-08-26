@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getEditions, setStatut, setEditionActive, ajouterEdition,
   supprimerEdition, detacherEdition, regrouperOeuvres, retirerOeuvre, rechercher, setCouverture,
+  getEditionsProposees,
   ajouterEditionManuelle, getListes, getListesDeLOeuvre, addToListe,
   removeFromListe, createListe,
 } from '../api.js';
@@ -88,6 +89,47 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
     [bibliotheque, oeuvre.oeuvreId, filtreCible],
   );
 
+  /*
+   * Les editions proposees par les catalogues. Chargees a l'OUVERTURE de la
+   * modale et non de la fiche : une recherche d'editions coute une requete, et
+   * toutes les fiches ne s'ouvrent pas pour cela.
+   *
+   * DECLARE ICI, avant le `if (sousModale)` qui suit : ce dernier fait un
+   * retour anticipe, et un hook place apres n'aurait jamais ete initialise —
+   * « Cannot access 'propositions' before initialization », constate a
+   * l'ouverture de la modale. Les hooks React s'appellent tous, toujours,
+   * avant le moindre `return`.
+   */
+  const [propositions, setPropositions] = useState({ etat: 'vide', liste: [] });
+  const [ajoutees, setAjoutees] = useState(new Set());
+
+  useEffect(() => {
+    if (!sousModale || sousModale.type !== 'ajout') return;
+    setPropositions({ etat: 'charge', liste: [] });
+    getEditionsProposees(oeuvre.oeuvreId)
+      .then((liste) => setPropositions({ etat: 'fait', liste }))
+      .catch(() => setPropositions({ etat: 'fait', liste: [] }));
+  }, [sousModale, oeuvre.oeuvreId]);
+
+  /*
+   * Prendre une edition SANS refermer : on en possede souvent plusieurs.
+   * La coche reste, pour qu'on voie ce qu'on vient de choisir.
+   */
+  const prendreEdition = async (r) => {
+    setAjoutees((avant) => new Set(avant).add(r.cleSource));
+    try {
+      await ajouterEdition(oeuvre.oeuvreId, r);
+      await onChange();
+    } catch (e) {
+      setAjoutees((avant) => {
+        const apres = new Set(avant);
+        apres.delete(r.cleSource);
+        return apres;
+      });
+      notify(e.message);
+    }
+  };
+
   const fermerSous = () => { setSousModale(null); setRecherche({ texte: '', resultats: [], etat: 'vide' }); };
 
   // --- sous-modales -------------------------------------------------------
@@ -96,10 +138,54 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
 
     if (type === 'ajout') {
       return (
-        <Modal titre="Ajouter une édition" onFermer={fermerSous}>
+        <Modal titre="Quelle édition as-tu ?" onFermer={fermerSous}>
+          {/*
+            Retour d'usage 109 : « j'aimerais que les editions associees
+            s'affichent et qu'on puisse choisir celle qu'on a (une ou
+            plusieurs) ». Il fallait auparavant les CHERCHER une par une, en
+            tapant leur titre — alors que le catalogue sait les lister.
+            La modale reste ouverte apres chaque choix : on en possede souvent
+            plusieurs, et refermer apres la premiere obligerait a tout
+            recommencer.
+          */}
           <p className="hint">
-            Cherche l’exemplaire que tu possèdes — par son ISBN au dos, ou par
-            son titre. Il rejoindra ce livre sans créer de doublon.
+            Coche les exemplaires que tu possèdes. Tu peux en choisir plusieurs
+            — un poche et un grand format, par exemple.
+          </p>
+
+          {propositions.etat === 'charge' && <p className="hint">Recherche des éditions…</p>}
+
+          {propositions.etat === 'fait' && propositions.liste.length === 0 && (
+            <p className="hint">
+              Aucune autre édition trouvée dans les catalogues. Tu peux la
+              saisir à la main ci-dessous.
+            </p>
+          )}
+
+          {propositions.liste.map((r) => {
+            const prise = ajoutees.has(r.cleSource);
+            return (
+              <button
+                key={r.cleSource}
+                type="button"
+                className={`ligne-resultat${prise ? ' ligne-resultat--prise' : ''}`}
+                disabled={prise}
+                onClick={() => prendreEdition(r)}
+              >
+                <b>{r.editeur || r.titre}</b>
+                <span>
+                  {[r.annee, r.isbn13 || r.isbn10, r.nbPages ? `${r.nbPages} p.` : null]
+                    .filter(Boolean).join(' · ')}
+                </span>
+                {prise ? <Icon name="valider" size={18} /> : <Icon name="plus" size={18} />}
+              </button>
+            );
+          })}
+
+          <h3 className="soustitre soustitre--serre">Ou cherche toi-même</h3>
+          <p className="hint">
+            Par son ISBN au dos, ou par son titre. Il rejoindra ce livre sans
+            créer de doublon.
           </p>
           <div className="champ">
             <Icon name="recherche" size={20} className="champ__icone" />
@@ -128,7 +214,7 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
               key={r.cleSource}
               type="button"
               className="ligne-resultat"
-              onClick={() => { fermerSous(); agir(() => ajouterEdition(oeuvre.oeuvreId, r), 'Édition ajoutée.'); }}
+              onClick={() => prendreEdition(r)}
             >
               <b>{r.titre}</b>
               <span>{[r.editeur, r.annee, r.nbPages ? `${r.nbPages} p.` : null].filter(Boolean).join(' · ')}</span>
@@ -209,11 +295,19 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
 
     if (type === 'rattacher') {
       return (
-        <Modal titre="Rattacher à une œuvre existante" onFermer={fermerSous}>
+        <Modal titre="Réunir deux livres de ma bibliothèque" onFermer={fermerSous}>
+          {/*
+            Le libelle disait « Rattacher a une oeuvre existante ». Retour
+            d'usage 108 : « on rattache a notre base de donnee, notre
+            bibliotheque » — « oeuvre existante » evoquait un catalogue
+            exterieur, alors qu'il s'agit de reunir DEUX livres qu'on possede
+            deja et qui sont en double.
+          */}
           <p className="hint">
-            Choisis le livre auquel celui-ci doit être rattaché. <b>C’est
-            l’autre qui gagne</b> : son statut, sa note et sa progression sont
-            conservés, et ce livre lui apporte ses éditions avant de disparaître.
+            Ces deux livres sont en double dans <b>ta bibliothèque</b> ? Choisis
+            celui à garder. <b>C’est lui qui gagne</b> : son statut, sa note et
+            sa progression sont conservés, et celui-ci lui apporte ses éditions
+            avant de disparaître.
           </p>
           <div className="champ">
             <Icon name="recherche" size={20} className="champ__icone" />
@@ -472,11 +566,11 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
         <p className="identite__cle">{oeuvre.oeuvreId}</p>
         <p className="identite__detail">
           {locale
-            ? 'Ce livre n’a pas été reconnu par Open Library. Si tu le vois en double dans ta bibliothèque, rattache-le à l’autre.'
+            ? 'Ce livre n’a pas été reconnu par Open Library. S’il apparaît deux fois dans ta bibliothèque, tu peux réunir les deux ci-dessous.'
             : 'Open Library a reconnu ce texte : ses autres éditions peuvent le rejoindre.'}
         </p>
         <button type="button" className="btn btn--large" onClick={() => setSousModale({ type: 'rattacher' })}>
-          Rattacher à une œuvre existante
+          C’est le même livre qu’un autre de ma bibliothèque
         </button>
       </div>
     </Modal>

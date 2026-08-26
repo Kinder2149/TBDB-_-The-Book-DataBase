@@ -225,6 +225,28 @@ export async function getEditions(oeuvreId) {
   return store.getEditions(await getActiveProfileId(), oeuvreId);
 }
 
+/*
+ * Les editions de ce texte qu'on pourrait posseder, MOINS celles deja suivies
+ * (§3.1). A la demande, jamais au chargement de la fiche : une recherche
+ * d'editions coute une requete, et toutes les fiches ne s'ouvrent pas pour
+ * cela.
+ */
+export async function getEditionsProposees(oeuvreId) {
+  const profileId = await getActiveProfileId();
+  const oeuvre = await store.getOeuvre(profileId, oeuvreId);
+  if (!oeuvre) return [];
+
+  const premierAuteur = String(oeuvre.auteurs || '').split(',')[0].trim();
+  const proposees = await books.editionsDe(oeuvre.titre, premierAuteur);
+
+  // Ce qu'on possede deja ne se propose pas une seconde fois.
+  const deja = new Set((await store.getEditions(profileId, oeuvreId)).map((e) => e.editionId));
+  const dejaIsbn = new Set(
+    (await store.getEditions(profileId, oeuvreId)).map((e) => e.isbn13).filter(Boolean),
+  );
+  return proposees.filter((p) => !deja.has(p.cleSource) && !(p.isbn13 && dejaIsbn.has(p.isbn13)));
+}
+
 export async function ajouterEdition(oeuvreId, resultat) {
   return store.ajouterEdition(await getActiveProfileId(), oeuvreId, resultat);
 }

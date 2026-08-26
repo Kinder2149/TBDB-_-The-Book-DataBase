@@ -1652,6 +1652,56 @@ désormais aussi le filet — sans consommer de quota, la BnF n'en ayant pas.
 
 ---
 
+---
+
+### Tranche 20 — 2026-08-26 : les éditions qu'on possède, et un mot trompeur
+
+| # | Demande | Ce qui existait | Correction |
+|---|---|---|---|
+| 108 | « Le terme *rattacher à une œuvre existante* est trompeur : on rattache à notre bibliothèque » | Exact. « Œuvre existante » évoquait un catalogue extérieur, alors qu'il s'agit de **réunir deux livres en double dans sa propre bibliothèque** | Bouton : « **C'est le même livre qu'un autre de ma bibliothèque** ». Modale : « **Réunir deux livres de ma bibliothèque** ». Le texte explique désormais que c'est un doublon qu'on fusionne |
+| 109 | « J'aimerais que les éditions associées s'affichent et qu'on puisse choisir celle qu'on a (une ou plusieurs), et choisir celle qui s'affiche » | Il fallait **chercher chaque édition à la main**, une par une, en tapant son titre — alors que les catalogues savent les lister | La modale s'ouvre désormais sur **les éditions déjà trouvées**, avec éditeur, année et ISBN. On en coche **plusieurs à la suite** sans qu'elle se referme, et l'`EditionPicker` existant choisit celle qui s'affiche |
+
+**La BnF passe ici EN PREMIER**, contrairement à la recherche générale où elle
+n'est qu'un filet. C'est le seul endroit où elle bat Google, et la mesure est
+nette : « les fourmis » + « werber » y rend **12 éditions françaises** — France
+Loisirs, Albin Michel, Livre de Poche… — avec éditeur, année et ISBN, en
+**645 ms**. C'est exactement la question qu'on lui pose : *quelles éditions de
+ce texte existent en France ?* Google, lui, mélange les tomes et les livres qui
+*parlent* de l'œuvre. Repli sur Google pour un livre étranger non traduit.
+
+**Open Library mesuré puis écarté pour cet usage** : `/works/{id}/editions`
+rend **161 à 252 éditions en 7,5 à 8,4 s**, toutes langues confondues — de
+l'italien, du portugais, du polonais, de l'hébreu. Inutilisable pour retrouver
+l'exemplaire posé sur son étagère.
+
+**Vérifié de bout en bout** : 13 éditions proposées, deux cochées à la suite
+sans fermeture, 3 éditions en base, changement de celle qui s'affiche — la
+pagination de la fiche suit.
+
+### Famille 9 de vérifications — les hooks avant tout retour
+
+**Deuxième fois qu'une insertion mal placée coûte une version.** Un `useState`
+avait été posé **après** le `if (sousModale) { return … }` de `Detail.jsx` :
+le hook n'était jamais initialisé à l'ouverture d'une sous-modale, et l'écran
+mourait sur « Cannot access 'propositions' before initialization ». C'est une
+règle universelle de React, que ni le build ni le rendu d'un écran ne peuvent
+voir — il faut *ouvrir* la sous-modale.
+
+Un contrôle lit donc le code lui-même. **Deux pièges en l'écrivant, tous deux
+instructifs :**
+
+1. La première version ne repérait le `return` qu'à quatre espaces
+   d'indentation — dans `Detail.jsx` il est imbriqué, donc à six. Elle ne
+   mordait pas.
+2. Elle serait passée même en n'analysant **aucun fichier**. Un garde-fou
+   exige désormais qu'au moins dix fichiers soient lus : *un contrôle qui
+   n'analyse rien passe toujours*.
+
+Preuve faite : le hook a été remis au mauvais endroit, le contrôle l'a nommé
+(`components\Detail.jsx:415`), puis il a été remis en place. **143 vérifications.**
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1667,7 +1717,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **107 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **109 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 
