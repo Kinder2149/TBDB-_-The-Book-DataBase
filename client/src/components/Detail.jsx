@@ -119,6 +119,15 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
     setAjoutees((avant) => new Set(avant).add(r.cleSource));
     try {
       await ajouterEdition(oeuvre.oeuvreId, r);
+      /*
+       * DEUX rechargements, et non un seul. `onChange()` rafraichit la
+       * bibliotheque d'App, mais la liste d'editions de CETTE fiche a son
+       * propre chargement : sans `charger()`, l'edition ajoutee n'apparaissait
+       * qu'apres avoir touche autre chose. Retour d'usage 110 : « j'ajoute une
+       * edition mais c'est pas pris en compte, j'ai du appuyer sur l'edition
+       * actuelle pour que ca charge ».
+       */
+      await charger();
       await onChange();
     } catch (e) {
       setAjoutees((avant) => {

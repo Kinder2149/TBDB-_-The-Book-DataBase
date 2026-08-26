@@ -257,3 +257,63 @@ describe('Cloisonnement entre profils', () => {
     expect(await store.getBibliotheque(autre)).toHaveLength(0);
   });
 });
+
+describe('La couverture suit l-edition active', () => {
+  /*
+   * Retour d'usage 111 : « le fait de changer l'edition ne prenait pas en
+   * compte le changement de l'image de couverture ». La pagination suivait,
+   * l'image non — elle venait toujours de l'oeuvre.
+   */
+  const avecImage = (cle, url) => resultat({ cleSource: cle, couvertureUrl: url });
+
+  it('changer d-edition change l-image affichee', async () => {
+    const id = await store.ajouterOeuvre(profil, avecImage('gb:a', 'https://img/a.jpg'), identite());
+    await store.ajouterEdition(profil, id, avecImage('gb:b', 'https://img/b.jpg'));
+
+    let [livre] = await store.getBibliotheque(profil);
+    expect(livre.couvertureUrl).toBe('https://img/a.jpg');
+
+    const editions = await store.getEditions(profil, id);
+    const autre = editions.find((e) => e.editionId === 'gb:b');
+    await store.setEditionActive(profil, id, autre.editionId);
+
+    [livre] = await store.getBibliotheque(profil);
+    expect(livre.couvertureUrl).toBe('https://img/b.jpg');
+  });
+
+  it('une edition SANS image retombe sur celle de l-oeuvre', async () => {
+    // C'est le cas des editions venues de la BnF : elle n'en fournit aucune.
+    const id = await store.ajouterOeuvre(profil, avecImage('gb:a', 'https://img/a.jpg'), identite());
+    await store.ajouterEdition(profil, id, avecImage('bnf:x', null));
+
+    const editions = await store.getEditions(profil, id);
+    await store.setEditionActive(profil, id, editions.find((e) => e.editionId === 'bnf:x').editionId);
+
+    const [livre] = await store.getBibliotheque(profil);
+    expect(livre.couvertureUrl).toBe('https://img/a.jpg');
+  });
+
+  it('une PHOTO PRISE A LA MAIN l-emporte toujours (§9)', async () => {
+    // « Une donnee corrigee a la main n'est jamais ecrasee par une lecture
+    // automatique » : la photo de l'utilisateur passe avant toute edition.
+    const id = await store.ajouterOeuvre(profil, avecImage('gb:a', 'https://img/a.jpg'), identite());
+    await store.ajouterEdition(profil, id, avecImage('gb:b', 'https://img/b.jpg'));
+    await store.setCouverture(profil, id, 'data:image/jpeg;base64,MAPHOTO');
+
+    const editions = await store.getEditions(profil, id);
+    await store.setEditionActive(profil, id, editions.find((e) => e.editionId === 'gb:b').editionId);
+
+    const [livre] = await store.getBibliotheque(profil);
+    expect(livre.couvertureUrl).toBe('data:image/jpeg;base64,MAPHOTO');
+  });
+
+  it('la fiche d-une oeuvre suit la meme regle que la grille', async () => {
+    const id = await store.ajouterOeuvre(profil, avecImage('gb:a', 'https://img/a.jpg'), identite());
+    await store.ajouterEdition(profil, id, avecImage('gb:b', 'https://img/b.jpg'));
+    const editions = await store.getEditions(profil, id);
+    await store.setEditionActive(profil, id, editions.find((e) => e.editionId === 'gb:b').editionId);
+
+    const oeuvre = await store.getOeuvre(profil, id);
+    expect(oeuvre.couvertureUrl).toBe('https://img/b.jpg');
+  });
+});

@@ -1702,6 +1702,36 @@ Preuve faite : le hook a été remis au mauvais endroit, le contrôle l'a nommé
 
 ---
 
+---
+
+### Tranche 21 — 2026-08-26 : l'édition ajoutée, et la couverture qui suit
+
+| # | Symptôme | Cause | Correction |
+|---|---|---|---|
+| 110 | « J'ajoute une édition mais c'est pas pris en compte, j'ai dû appuyer sur l'édition actuelle pour que ça charge » | `prendreEdition` appelait `onChange()`, qui rafraîchit la bibliothèque d'`App` — mais la liste d'éditions de la **fiche** a son propre chargement. L'édition existait en base et ne s'affichait pas | `charger()` **et** `onChange()`. Vérifié à l'écran : 1 → 2 éditions sans rien toucher d'autre |
+| 111 | « Changer l'édition ne prenait pas en compte le changement de l'image de couverture, j'aimerais que la pochette s'adapte si on l'a » | La couverture venait toujours de la table `oeuvres`. La pagination suivait l'édition active, l'image non — alors que `editions.couverture_url` existait **déjà** et était remplie | La requête de bibliothèque choisit désormais l'image dans cet ordre |
+
+**L'ordre des couvertures, et pourquoi** — il applique §9, *« une donnée
+corrigée à la main n'est jamais écrasée par une lecture automatique »* :
+
+1. une **photo prise par l'utilisateur** (`data:`) l'emporte toujours ;
+2. sinon la couverture de **l'édition active**, si elle en a une ;
+3. sinon celle de l'œuvre — puis la couverture dessinée.
+
+L'étape 2 sans l'étape 1 aurait fait disparaître la photo personnelle dès qu'on
+change d'édition. L'étape 3 est indispensable : **les éditions venues de la BnF
+n'ont aucune image**, et sans elle, choisir une édition BnF aurait vidé la
+vignette.
+
+**Vérifié de bout en bout** : la grille et la fiche montrent la couverture de
+l'édition active, et elle change quand on bascule d'une édition à l'autre —
+Google pour Albin Michel, Open Library pour France Loisirs.
+
+**147 vérifications** (4 cas ajoutés à la famille 2, dont la primauté de la
+photo personnelle).
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1717,7 +1747,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **109 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **111 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

@@ -54,7 +54,23 @@ SELECT o.oeuvre_id        AS oeuvreId,
        o.auteurs          AS auteurs,
        o.annee            AS annee,
        o.date_publication AS datePublication,
-       o.couverture_url   AS couvertureUrl,
+       /*
+        * LA COUVERTURE SUIT L'EDITION ACTIVE (retour d'usage 111 : « j'aimerais
+        * que la pochette s'adapte si on l'a »). Changer d'edition changeait
+        * bien la pagination, mais l'image restait celle de la premiere.
+        *
+        * L'ordre compte, et il applique §9 — « une donnee corrigee a la main
+        * n'est jamais ecrasee par une lecture automatique » :
+        *   1. une photo prise par l'utilisateur (data:) l'emporte TOUJOURS ;
+        *   2. sinon la couverture de l'edition active, si elle en a une ;
+        *   3. sinon celle de l'oeuvre.
+        * Les editions venues de la BnF n'ont pas d'image : on retombe alors
+        * sur celle de l'oeuvre, puis sur la couverture dessinee.
+        */
+       CASE
+         WHEN o.couverture_url LIKE 'data:%' THEN o.couverture_url
+         ELSE COALESCE(e.couverture_url, o.couverture_url)
+       END                AS couvertureUrl,
        o.resume           AS resume,
        o.categories       AS categories,
        o.langue           AS langue,
