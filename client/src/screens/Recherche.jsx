@@ -16,7 +16,7 @@ import {
 } from '../api.js';
 import { LIBELLES, STATUTS, classeStatut, ageLisible } from '../status.js';
 import { grouperParAuteur } from '../auteurs.js';
-import { separerLesTomes } from '../tomes.js';
+import { separerLesTomes, serieAConfirmer } from '../tomes.js';
 import { notify } from '../notify.js';
 import SearchBar from '../components/SearchBar.jsx';
 import BookCard from '../components/BookCard.jsx';
@@ -145,6 +145,17 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
       setPoseArchive(ancien ? pose : null);
       setEtat('fait');
       relireHistorique();
+
+      /*
+       * SERIE PRESSENTIE : on confirme sans attendre le defilement.
+       * Deux tomes dans la premiere page et pas trois — c'est exactement le
+       * cas de « game of thrones », noye sous les essais qui PARLENT de la
+       * serie. Sans cela, le bloc « La serie, dans l'ordre » ne surgissait
+       * qu'apres deux defilements, en reorganisant l'ecran sous les yeux.
+       */
+      if (trouves.length >= 20 && modeCourant !== 'isbn' && serieAConfirmer(trouves)) {
+        void confirmerLaSerie(texte, modeCourant, seq);
+      }
     } catch (e) {
       if (seq !== sequence.current) return;
       setEtat('erreur');
@@ -264,6 +275,26 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
     regarder();
     return () => window.removeEventListener('scroll', regarder);
   }, [encoreDesResultats, page, chargerLaSuite]);
+
+  /*
+   * Charge la page suivante en silence pour confirmer une serie. Volontairement
+   * distincte de `chargerLaSuite` : elle ne montre aucun indicateur de
+   * chargement — l'utilisateur n'a rien demande, il ne doit rien voir d'autre
+   * que des livres qui s'ajoutent. Et elle abandonne sans bruit si une frappe
+   * plus recente a gagne.
+   */
+  const confirmerLaSerie = useCallback(async (texte, modeCourant, seq) => {
+    try {
+      const { resultats: encore } = await rechercherAvecEtat(texte, modeCourant, 1);
+      if (seq !== sequence.current) return;
+      setResultats((avant) => {
+        const connus = new Set(avant.map((r) => r.cleSource));
+        return [...avant, ...encore.filter((r) => !connus.has(r.cleSource))];
+      });
+      setPage(1);
+      setEncoreDesResultats(encore.length >= 20);
+    } catch { /* la confirmation a echoue : le defilement fera le travail */ }
+  }, []);
 
   const ouvrir = useCallback(async (resultat) => {
     setOuvert(resultat);

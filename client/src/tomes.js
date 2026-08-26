@@ -80,3 +80,41 @@ export function separerLesTomes(resultats) {
   numerotes.sort((a, b) => a.tome - b.tome);
   return { tomes: numerotes, autres };
 }
+
+/*
+ * Combien de tomes DIFFERENTS dans ces resultats ? Sert a repérer une serie
+ * PRESSENTIE : deux tomes ne suffisent pas a l'affirmer, mais suffisent a
+ * aller regarder la page suivante.
+ */
+export function nombreDeTomes(resultats) {
+  const vus = new Set();
+  (resultats || []).forEach((r) => {
+    const n = numeroDeTome(r.titre);
+    if (n !== null) vus.add(n);
+  });
+  return vus.size;
+}
+
+/**
+ * Faut-il aller chercher la page suivante pour confirmer une serie ?
+ *
+ * Retour d'usage 116 : « en cherchant game of thrones, a un moment tout en
+ * haut apparait un bloc "La serie dans l'ordre" avec les bons livres, trop
+ * bien, mais pourquoi il n'apparait pas depuis le debut ? »
+ *
+ * Mesure du 2026-08-26 : la premiere page de « game of thrones » ne contient
+ * que DEUX tomes — le reste est constitue d'essais SUR la serie (« une
+ * metaphysique des meurtres », « le livre des festins », « comprendre le
+ * leadership avec la serie »). Le seuil de trois n'etait donc atteint qu'en
+ * page 2, c'est-a-dire apres deux defilements : le bloc surgissait alors en
+ * haut et tout se reorganisait sous les yeux de l'utilisateur.
+ *
+ * On va donc chercher la confirmation TOUT DE SUITE, mais seulement quand il
+ * y a lieu : deux tomes vus, trois pas encore atteints. Une requete de plus,
+ * dans ce cas precis, et le bloc apparait en une seconde au lieu de surgir
+ * plus tard.
+ */
+export function serieAConfirmer(resultats) {
+  const n = nombreDeTomes(resultats);
+  return n === 2;
+}

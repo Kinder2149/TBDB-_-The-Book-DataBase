@@ -122,9 +122,34 @@ function messageFrancais(code) {
   return `Google Books a répondu ${code}.`;
 }
 
-/** Google rend les couvertures en http:// — un WebView en https les bloque. */
-function forcerHttps(url) {
-  return url ? url.replace(/^http:\/\//, 'https://') : null;
+/*
+ * L'IMAGE DE COUVERTURE, remise a l'endroit et a la bonne taille.
+ *
+ * Trois corrections en une, mesurees le 2026-08-26 :
+ *
+ *  1. Google rend ses couvertures en `http://` — un WebView en https les
+ *    bloque. On force le protocole.
+ *
+ *  2. `zoom=1` rend une vignette de 128 x 207 pixels. Sur un ecran de
+ *    telephone, c'est une image floue et grise qu'on ne « voit » pas —
+ *    d'ou le retour d'usage 115 : « les couvertures sont rarement
+ *    affichees ». Elles etaient pourtant bien la : 13 a 20 sur 20 dans les
+ *    resultats, et 13 sur 13 se chargeaient sans erreur. Elles etaient
+ *    seulement minuscules.
+ *    `zoom=2` rend 300 x 474 SANS AUCUNE REQUETE SUPPLEMENTAIRE — c'est la
+ *    meme adresse, un chiffre change. (`zoom=3` monterait a 575 x 908, mais
+ *    40 Ko par vignette pour une grille de vingt livres n'ajouterait rien
+ *    de visible sur une carte de 150 px.)
+ *
+ *  3. `edge=curl` dessine une page cornee sur le bord de l'image. C'est un
+ *    effet d'epoque qui salit la grille et mange 1,3 Ko par vignette.
+ */
+function imageCouverture(url) {
+  if (!url) return null;
+  return url
+    .replace(/^http:\/\//, 'https://')
+    .replace(/([?&])zoom=\d/, '$1zoom=2')
+    .replace(/&edge=curl/g, '');
 }
 
 function extraireIsbn(identifiants, type) {
@@ -151,7 +176,7 @@ function normaliserVolume(item) {
     annee: date ? date.slice(0, 4) : null,
     datePublication: date,
     // zoom=1 est la vignette ; on garde celle-là, la grille est en 2:3.
-    couvertureUrl: forcerHttps(images.thumbnail || images.smallThumbnail || null),
+    couvertureUrl: imageCouverture(images.thumbnail || images.smallThumbnail || null),
     resume: vi.description || null,
     categories: Array.isArray(vi.categories) ? vi.categories : [],
     langue: vi.language || null,

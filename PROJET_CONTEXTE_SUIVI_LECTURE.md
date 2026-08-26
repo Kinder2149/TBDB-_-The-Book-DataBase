@@ -1768,6 +1768,43 @@ d'identité et à la fusion).
 
 ---
 
+---
+
+### Tranche 23 — 2026-08-26 : la qualité des résultats, mesurée puis corrigée
+
+Trois sujets posés ensemble : *« les couvertures sont rarement affichées et ce
+sont souvent les vieilles »*, *« j'aimerais pouvoir trier »*, *« pourquoi le
+bloc de la série n'apparaît pas depuis le début ? »*.
+
+| # | Symptôme | Ce que la mesure a dit | Correction |
+|---|---|---|---|
+| 115 | « Les couvertures sont rarement affichées » | **Elles ne manquaient pas.** 13 à 20 sur 20 dans les résultats, et **13 sur 13 se chargeaient sans erreur** en HTTPS. Elles faisaient **128 × 207 pixels** — une vignette floue et grise qu'on ne « voit » pas sur un téléphone —, avec un effet de page cornée par-dessus | `zoom=2` dans l'adresse de l'image : **300 × 474**, sans **aucune** requête supplémentaire, c'est la même adresse et un chiffre qui change. `edge=curl` retiré. Vérifié à l'écran : **300 × 462 chargés**, 38 couvertures sur 40 livres |
+| 116 | « Pourquoi le bloc de la série n'apparaît qu'après ? » | Le bloc exige **3 tomes**. Or la première page de « game of thrones » n'en contient que **DEUX** — le reste est constitué d'essais *sur* la série (« une métaphysique des meurtres », « le livre des festins », « comprendre le leadership avec la série »). Le seuil n'était atteint qu'en page 2, donc **après deux défilements** : le bloc surgissait alors en haut et tout se réorganisait sous les yeux | **Série pressentie** : deux tomes vus et trois pas atteints → la page suivante est chargée **immédiatement**, en silence. Une requête de plus, uniquement dans ce cas. Vérifié : le bloc apparaît **sans défiler** |
+
+**Le tri : mesuré, puis abandonné à la demande de Kinder.** Google **ignore**
+la consigne de tri — testé, `orderBy=newest` renvoie exactement le même ordre
+que par défaut, mêmes titres et mêmes années. Un tri aurait donc dû se faire
+dans l'application, sur les résultats déjà reçus. Interrogé sur les tris
+souhaités, Kinder n'a retenu que **« Pertinence »**, qui est l'ordre actuel :
+le sujet devient sans objet et **rien n'a été ajouté**. Point signalé, car sa
+demande initiale mentionnait la date de sortie.
+
+**Deux pistes mesurées puis écartées pour les couvertures manquantes** — celles
+des livres venus du filet BnF, qui ne fournit aucune image :
+
+| Rattrapage tenté | Résultat |
+|---|---|
+| Google Books par ISBN | **1 sur 5** |
+| Open Library par ISBN | **3 sur 5** |
+
+Le repli Open Library est **déjà en place** (`avecCouvertureDeRepli`) et
+s'applique aux résultats de la BnF. Rien à ajouter ; le quart restant garde sa
+couverture dessinée.
+
+**159 vérifications** (4 cas ajoutés à la famille 7).
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1783,7 +1820,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **114 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **116 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

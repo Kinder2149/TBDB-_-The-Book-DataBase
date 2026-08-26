@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { numeroDeTome, separerLesTomes } from '../src/tomes.js';
+import { numeroDeTome, separerLesTomes, nombreDeTomes, serieAConfirmer } from '../src/tomes.js';
 
 describe('Lire un numero de tome dans un titre', () => {
   it('reconnait les formes francaises', () => {
@@ -81,5 +81,43 @@ describe('Separer une serie du reste', () => {
   it('supporte une liste vide', () => {
     expect(separerLesTomes([])).toEqual({ tomes: [], autres: [] });
     expect(separerLesTomes(null)).toEqual({ tomes: [], autres: [] });
+  });
+});
+
+describe('Reperer une serie PRESSENTIE, pour la confirmer tout de suite', () => {
+  /*
+   * Retour d'usage 116 : le bloc « La serie, dans l'ordre » surgissait apres
+   * deux defilements sur « game of thrones ». Mesure : sa premiere page ne
+   * contient que DEUX tomes, noyes sous les essais qui PARLENT de la serie.
+   */
+  const r = (titre) => ({ cleSource: titre, titre });
+
+  it('compte les tomes distincts, pas les livres', () => {
+    expect(nombreDeTomes([r('S tome 1'), r('S tome 1 poche'), r('S tome 2')])).toBe(2);
+    expect(nombreDeTomes([r('Germinal'), r('Nana')])).toBe(0);
+    expect(nombreDeTomes([])).toBe(0);
+  });
+
+  it('DEUX tomes : on va confirmer — c-est le cas de Game of Thrones', () => {
+    const page1 = [
+      r('Game of Thrones : une métaphysique des meurtres'),
+      r('Le livre des festins'),
+      r('A Game of Thrones - La Bataille des rois - Tome 1'),
+      r('Game of Thrones Tome 2'),
+    ];
+    expect(serieAConfirmer(page1)).toBe(true);
+    // et le bloc ne s-affiche PAS encore : deux tomes ne font pas une serie.
+    expect(separerLesTomes(page1).tomes).toHaveLength(0);
+  });
+
+  it('TROIS tomes : inutile de confirmer, le bloc s-affiche deja', () => {
+    const page1 = [r('S tome 1'), r('S tome 2'), r('S tome 3')];
+    expect(serieAConfirmer(page1)).toBe(false);
+    expect(separerLesTomes(page1).tomes).toHaveLength(3);
+  });
+
+  it('ZERO ou UN tome : rien a confirmer, ce n-est pas une serie', () => {
+    expect(serieAConfirmer([r('Germinal'), r('Nana')])).toBe(false);
+    expect(serieAConfirmer([r('S tome 1'), r('Germinal')])).toBe(false);
   });
 });
