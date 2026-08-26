@@ -1026,3 +1026,30 @@ button { font: inherit; color: inherit; }
   font-family: inherit;
   line-height: 1.5;
 }
+
+/*
+ * Vignette d'une edition dans la liste (retour d'usage 117). Petite et au
+ * format 2:3 comme toutes les couvertures du projet : elle sert a RECONNAITRE
+ * l'exemplaire qu'on a en main, pas a le contempler.
+ */
+.ligne-resultat { display: flex; align-items: center; gap: .1rem; }
+/* Dans une ligne de resultat, le texte doit pouvoir se retrecir. */
+.ligne-resultat b, .ligne-resultat span:not(.edition__vignette) { min-width: 0; }
+
+.edition__vignette {
+  flex: 0 0 auto;
+  width: 38px; height: 57px;
+  margin-right: .55rem;
+  overflow: hidden;
+  border-radius: .2rem;
+  background: var(--surface2);
+}
+.edition__vignette img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* La couverture dessinee doit tenir dans 38 px : son texte y serait illisible. */
+.edition__vignette .carte-livre__dessinee { padding: .2rem; gap: .1rem; }
+.edition__vignette .carte-livre__dessinee-titre { font-size: .38rem; -webkit-line-clamp: 4; }
+.edition__vignette .carte-livre__dessinee-auteur { display: none; }

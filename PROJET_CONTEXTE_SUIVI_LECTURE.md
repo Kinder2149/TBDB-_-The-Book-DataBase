@@ -1805,6 +1805,34 @@ couverture dessinée.
 
 ---
 
+---
+
+### Tranche 24 — 2026-08-26 : la vignette de chaque édition
+
+| # | Demande | Correction |
+|---|---|---|
+| 117 | « Dans la liste des éditions d'un livre, j'aimerais voir la miniature de l'édition » | Vignette de **38 × 57 px**, format 2:3 comme toutes les couvertures du projet, **aux deux endroits** : la liste des éditions possédées (`EditionPicker`) et celle des éditions proposées à l'ajout |
+
+La donnée était déjà là — `editions.couverture_url` est remplie depuis
+l'origine, et `getEditions()` la rendait déjà. Il n'y avait qu'à l'afficher.
+
+**Pourquoi les deux endroits** : choisir entre « A. Michel 1991 » et « le Livre
+de poche 2024 » sur la foi de deux lignes de texte demande de connaître ses
+éditions par cœur ; leurs couvertures se reconnaissent d'un coup d'œil. C'est
+au moment de **cocher** qu'on en a le plus besoin.
+
+**Repli en cascade, comme partout ailleurs** : vraie couverture → couverture
+dessinée si l'édition n'en a pas (cas de la BnF) → couverture dessinée aussi si
+l'adresse de l'image ne répond plus (`onError`). Mesuré sur *Les Fourmis* :
+**10 éditions sur 10 illustrées**, dont 8 vraies couvertures et 2 dessinées.
+
+**Fausse alerte relevée puis écartée** : un premier comptage annonçait « une
+ligne sans vignette ». C'était le bouton **« Saisir un exemplaire à la main »**,
+qui partage la classe `.ligne-resultat` — pas une édition. Aucune correction
+n'était nécessaire, et il aurait été facile de « réparer » ce qui allait bien.
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1820,7 +1848,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **116 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **117 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

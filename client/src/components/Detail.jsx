@@ -103,6 +103,7 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
    */
   const [propositions, setPropositions] = useState({ etat: 'vide', liste: [] });
   const [ajoutees, setAjoutees] = useState(new Set());
+  const [imagesCassees, setImagesCassees] = useState(new Set());
 
   useEffect(() => {
     if (!sousModale || sousModale.type !== 'ajout') return;
@@ -182,6 +183,25 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
                 disabled={prise}
                 onClick={() => prendreEdition(r)}
               >
+                {/* La vignette d'abord : c'est elle qui fait reconnaitre
+                    l'exemplaire qu'on a en main (retour d'usage 117). */}
+                <span className="edition__vignette">
+                  {/*
+                    `onError` comme partout ailleurs dans le projet : une
+                    adresse d'image peut ne plus repondre, et sans ce repli la
+                    ligne restait VIDE — constate sur une edition sur onze.
+                  */}
+                  {r.couvertureUrl && !imagesCassees.has(r.cleSource) ? (
+                    <img
+                      src={r.couvertureUrl}
+                      alt=""
+                      loading="lazy"
+                      onError={() => setImagesCassees((avant) => new Set(avant).add(r.cleSource))}
+                    />
+                  ) : (
+                    <CouvertureDessinee titre={r.titre} auteur={r.editeur} />
+                  )}
+                </span>
                 <b>{r.editeur || r.titre}</b>
                 <span>
                   {[r.annee, r.isbn13 || r.isbn10, r.nbPages ? `${r.nbPages} p.` : null]

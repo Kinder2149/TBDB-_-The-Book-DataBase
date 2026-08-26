@@ -10,7 +10,9 @@
  * qui échoue toujours est pire qu'un bouton absent.
  */
 
+import { useState } from 'react';
 import Icon from './Icon.jsx';
+import CouvertureDessinee from './CouvertureDessinee.jsx';
 
 const FORMATS = { papier: 'Papier', numerique: 'Numérique', audio: 'Audio' };
 
@@ -18,6 +20,9 @@ export default function EditionPicker({
   editions, editionActive, onChoisir, onDetacher, onSupprimer, onAjouter,
 }) {
   const seule = editions.length <= 1;
+  /* Une adresse d'image peut ne plus repondre : on retombe alors sur la
+     couverture dessinee plutot que d'afficher une image brisee. */
+  const [cassees, setCassees] = useState(new Set());
 
   return (
     <div className="editions">
@@ -51,6 +56,28 @@ export default function EditionPicker({
             >
               <span className="edition__marque">
                 {active ? <Icon name="valider" size={16} /> : null}
+              </span>
+
+              {/*
+                LA VIGNETTE DE CHAQUE EDITION (retour d'usage 117). Choisir
+                entre « A. Michel 1991 » et « le Livre de poche 2024 » sur la
+                foi de deux lignes de texte demande de connaitre ses editions
+                par coeur ; leurs couvertures, elles, se reconnaissent d'un
+                coup d'oeil.
+                Les editions venues de la BnF n'ont pas d'image : elles
+                recoivent la couverture dessinee, comme partout ailleurs.
+              */}
+              <span className="edition__vignette">
+                {e.couvertureUrl && !cassees.has(e.editionId) ? (
+                  <img
+                    src={e.couvertureUrl}
+                    alt=""
+                    loading="lazy"
+                    onError={() => setCassees((avant) => new Set(avant).add(e.editionId))}
+                  />
+                ) : (
+                  <CouvertureDessinee titre={e.titre} auteur={e.editeur} />
+                )}
               </span>
               <span className="edition__texte">
                 <b>{e.titre}</b>
