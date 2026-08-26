@@ -326,9 +326,24 @@ export async function getSuggestions() {
   const profileId = await getActiveProfileId();
   const bibliotheque = await store.getBibliotheque(profileId);
 
-  // Graines : les oeuvres lues ou en cours, les plus recemment ajoutees.
-  const graines = bibliotheque
-    .filter((o) => o.statut === 'lu' || o.statut === 'en_cours')
+  /*
+   * GRAINES — corrige apres le retour d'usage 104 : « j'ai deja ajoute 10
+   * livres et rien ne s'affiche ».
+   *
+   * La version precedente n'acceptait que les livres « lu » ou « en cours ».
+   * Or un livre ajoute entre en « a lire » : ajouter dix livres donnait donc
+   * ZERO graine, et l'ecran restait desesperement vide sans que rien ne
+   * l'explique. Le message « marque des livres comme lus ou en cours »
+   * demandait un travail que personne n'a envie de faire pour obtenir des
+   * suggestions.
+   *
+   * Un livre range dans « a lire » exprime un gout aussi clairement qu'un
+   * livre termine — c'est meme le signal le plus frais. On les prend donc
+   * TOUS, en mettant simplement devant ceux qu'on a lus ou commences.
+   */
+  const rang = { lu: 0, en_cours: 1, a_lire: 2, abandonne: 3 };
+  const graines = [...bibliotheque]
+    .sort((a, b) => (rang[a.statut] ?? 9) - (rang[b.statut] ?? 9))
     .slice(0, 12);
 
   if (graines.length === 0) return [];

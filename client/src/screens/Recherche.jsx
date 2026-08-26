@@ -26,6 +26,13 @@ import MenuCategorie from '../components/MenuCategorie.jsx';
 import CreationManuelle from '../components/CreationManuelle.jsx';
 import Icon from '../components/Icon.jsx';
 
+/*
+ * Pages chargees automatiquement au defilement avant de rendre la main a
+ * l'utilisateur. Cinq pages = cent livres : au-dela, on ne parcourt plus une
+ * liste, on epuise un quota.
+ */
+const MAX_PAGES_AUTO = 5;
+
 export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
   const [mode, setMode] = useState('titre');
   const [resultats, setResultats] = useState([]);
@@ -86,6 +93,13 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
     [mode, resultats, derniereRequete],
   );
 
+  /*
+   * Google plafonne a 20 resultats par requete — mesure du 2026-08-25 :
+   * demander 40 en rend 20 quand meme. La seule facon d'en voir davantage est
+   * d'enchainer les pages, et le retour d'usage 105 est clair : « je dois
+   * appuyer sur un bouton pour afficher les 20 suivants et ainsi de suite ».
+   * On charge donc la suite TOUT SEUL quand le bas de la liste approche.
+   */
   const sequence = useRef(0);
   // Ce qu'il faut rejouer quand l'utilisateur touche « Reessayer ».
   const derniere = useRef(null);
@@ -218,6 +232,38 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
       setChargeSuite(false);
     }
   }, [page, resultats, chargeSuite]);
+
+  /*
+   * CHARGEMENT AUTOMATIQUE AU DEFILEMENT.
+   *
+   * Ecrit d'abord avec `IntersectionObserver`, qui est l'outil prevu pour
+   * cela — puis ABANDONNE apres mesure : il ne se declenchait jamais, meme
+   * pose a la main sur la meme sentinelle, alors que celle-ci etait bien dans
+   * la fenetre (a 632 px pour une hauteur de 720). Quelque chose dans la mise
+   * en page l'en empechait ; chercher quoi aurait coute plus cher que la
+   * solution simple.
+   *
+   * Un ecouteur de defilement, lui, ne depend d'aucune subtilite de rendu et
+   * se comporte pareil dans un WebView Android. La marge de 500 px declenche
+   * le chargement AVANT le bas, pour que le defilement ne s'interrompe pas.
+   *
+   * Deux garde-fous : on s'arrete apres MAX_PAGES_AUTO pages pour ne pas vider
+   * le quota Google sur un simple defilement, et la suite repasse alors par un
+   * bouton — au-dela, continuer devient un choix.
+   */
+  useEffect(() => {
+    if (!encoreDesResultats || page + 1 >= MAX_PAGES_AUTO) return undefined;
+
+    const regarder = () => {
+      const bas = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+      if (bas < 500) chargerLaSuite();
+    };
+    window.addEventListener('scroll', regarder, { passive: true });
+    // Une liste plus courte que l'ecran n'emet aucun evenement de defilement :
+    // on regarde donc AUSSI tout de suite.
+    regarder();
+    return () => window.removeEventListener('scroll', regarder);
+  }, [encoreDesResultats, page, chargerLaSuite]);
 
   const ouvrir = useCallback(async (resultat) => {
     setOuvert(resultat);
@@ -434,8 +480,9 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
 
           {suggestions !== null && suggestions.length === 0 && !suggestionsEnCours && (
             <p className="hint">
-              Rien à proposer pour l’instant. Marque des livres comme lus ou en
-              cours : c’est à partir d’eux que les suggestions se construisent.
+              Rien à proposer pour l’instant. Ajoute quelques livres à ta
+              bibliothèque : les propositions se construisent à partir de leurs
+              auteurs et de leurs genres.
             </p>
           )}
 
@@ -513,15 +560,17 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
         <div className="grille">{resultats.map((r) => carteResultat(r))}</div>
       ) : null}
 
-      {encoreDesResultats && resultats.length > 0 && (
-        <button
-          type="button"
-          className="btn btn--large"
-          onClick={chargerLaSuite}
-          disabled={chargeSuite}
-        >
+      {chargeSuite && <p className="hint">Encore quelques livres…</p>}
+
+      {/*
+        Le bouton ne reste que si le chargement automatique s'est arrete de
+        lui-meme, apres MAX_PAGES_AUTO pages. Au-dela, continuer devient un
+        choix, pas un automatisme — c'est le quota qui l'impose.
+      */}
+      {encoreDesResultats && !chargeSuite && page + 1 >= MAX_PAGES_AUTO && (
+        <button type="button" className="btn btn--large" onClick={chargerLaSuite}>
           <Icon name="actualiser" size={16} />
-          <span>{chargeSuite ? 'Recherche…' : `Voir plus de livres (${resultats.length} affichés)`}</span>
+          <span>Charger encore des livres ({resultats.length} affichés)</span>
         </button>
       )}
 

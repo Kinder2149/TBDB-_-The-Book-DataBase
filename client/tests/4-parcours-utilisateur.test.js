@@ -166,3 +166,51 @@ describe('Deux livres differents ne se confondent pas', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('Les suggestions se construisent sur ce qu-on a', () => {
+  /*
+   * Retour d'usage 104 : « j'ai deja ajoute 10 livres et rien ne s'affiche ».
+   * La version precedente n'acceptait comme graines que les livres « lu » ou
+   * « en cours ». Or un livre ajoute entre en « a lire » : dix ajouts
+   * donnaient donc ZERO graine et un ecran vide, sans explication.
+   */
+  it('DIX LIVRES AJOUTES suffisent — sans avoir a les marquer lus', async () => {
+    vi.stubGlobal('fetch', async (url) => {
+      if (String(url).includes('googleapis')) {
+        return new Response(JSON.stringify({
+          items: Array.from({ length: 5 }, (_, i) => ({
+            id: 'sug' + Math.random(),
+            volumeInfo: {
+              title: 'Proposition ' + i + '-' + Math.random().toString(36).slice(2, 6),
+              authors: ['Un Auteur'],
+              industryIdentifiers: [{ type: 'ISBN_13', identifier: '978' + Math.random().toString().slice(2, 12) }],
+            },
+          })),
+        }), { status: 200 });
+      }
+      return new Response('null', { status: 404 });
+    });
+
+    for (let i = 0; i < 10; i += 1) {
+      await api.ajouterOeuvre(livreScanne({
+        cleSource: 'gb:l' + i,
+        titre: 'Mon livre ' + i,
+        isbn13: '978000000000' + i,
+      }));
+    }
+    await respirer();
+
+    // Aucun n'a ete marque lu : ils sont tous en « a lire », par defaut.
+    const biblio = await api.getBibliotheque();
+    expect(biblio).toHaveLength(10);
+    expect(biblio.every((o) => o.statut === 'a_lire')).toBe(true);
+
+    const suggestions = await api.getSuggestions();
+    expect(suggestions.length).toBeGreaterThan(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('une bibliotheque VIDE ne propose rien, et c-est normal', async () => {
+    expect(await api.getSuggestions()).toEqual([]);
+  });
+});

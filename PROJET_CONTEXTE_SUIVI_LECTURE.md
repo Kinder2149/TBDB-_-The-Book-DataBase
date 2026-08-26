@@ -1568,6 +1568,37 @@ Le coupable était la pagination, pas la langue.
 
 ---
 
+---
+
+### Tranche 18 — 2026-08-25 : les suggestions vides, et le bouton de trop
+
+| # | Symptôme | Cause RÉELLE | Correction |
+|---|---|---|---|
+| 104 | « J'ai déjà ajouté 10 livres et rien ne s'affiche » | Les suggestions n'acceptaient comme **graines** que les livres marqués « lu » ou « en cours ». Or un livre ajouté entre en **« à lire »** : dix ajouts donnaient donc **zéro graine** et un écran vide. Le message d'aide demandait un travail — marquer ses livres — que personne n'a envie de faire pour obtenir des propositions | **Tous** les livres servent de graine, ceux qu'on a lus ou commencés simplement placés devant. Vérifié : 5 livres tous en « à lire » → **20 propositions**. Le message d'état vide corrigé en conséquence |
+| 105 | « Je dois appuyer sur un bouton pour afficher les 20 suivants, et ainsi de suite » | Google **plafonne à 20 résultats par requête** : mesure du 2026-08-25, demander `maxResults=40` en rend 20 quand même, avec ou sans `langRestrict`. Enchaîner les pages est donc la seule voie — mais la faire déclencher par l'utilisateur était une corvée | **Chargement automatique au défilement**, jusqu'à **5 pages (100 livres)**. Au-delà, le bouton reprend la main : continuer devient un choix, c'est le quota qui l'impose. Vérifié : 20 → 40 → 60 → 80 → 100, puis bouton |
+
+**Deux pièges rencontrés en écrivant le chargement automatique**, tous deux
+résolus à l'exécution et non par raisonnement :
+
+1. La sentinelle de fin de liste avait une **hauteur de 0 px**. Un élément sans
+   hauteur n'est jamais considéré comme visible par `IntersectionObserver` :
+   le chargement ne partait jamais.
+2. Même avec une hauteur, l'observateur **ne se déclenchait toujours pas** —
+   pas davantage posé à la main sur la même sentinelle, alors qu'elle était
+   bien dans la fenêtre (632 px pour une hauteur de 720). Quelque chose dans la
+   mise en page l'en empêchait. **`IntersectionObserver` a été abandonné** au
+   profit d'un simple écouteur de défilement : il ne dépend d'aucune subtilité
+   de rendu et se comporte pareil dans un WebView Android. Chercher la cause
+   exacte aurait coûté plus cher que la solution simple.
+
+**Règle conservée** : la suggestion du **tome suivant** continue de n'utiliser
+que les livres « lu » ou « en cours ». Proposer le tome 2 d'un livre qu'on n'a
+pas encore ouvert serait prématuré.
+
+**129 vérifications** (famille 4 enrichie du cas « dix livres à lire »).
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1583,7 +1614,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **103 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **105 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 
