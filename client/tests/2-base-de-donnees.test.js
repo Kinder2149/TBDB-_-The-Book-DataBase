@@ -317,3 +317,101 @@ describe('La couverture suit l-edition active', () => {
     expect(oeuvre.couvertureUrl).toBe('https://img/b.jpg');
   });
 });
+
+describe('Mon avis : une note et un commentaire par livre', () => {
+  /*
+   * Retour d'usage 112 : « j'aimerais pour chaque livre pouvoir ajouter une
+   * note dessus, peu importe l'edition, note et commentaire associes ».
+   * La colonne `note` existait depuis le premier jour mais AUCUN ecran ne la
+   * proposait ; le commentaire, lui, manquait vraiment (migration 3).
+   */
+  let id;
+  beforeEach(async () => { id = await store.ajouterOeuvre(profil, resultat(), identite()); });
+
+  it('enregistre la note ET le commentaire ensemble', async () => {
+    await store.setAvis(profil, id, 4, 'Lu en deux jours.');
+    const o = await store.getOeuvre(profil, id);
+    expect(o.note).toBe(4);
+    expect(o.commentaire).toBe('Lu en deux jours.');
+  });
+
+  it('permet de retirer une note qu-on regrette', async () => {
+    await store.setAvis(profil, id, 5, 'Formidable');
+    await store.setAvis(profil, id, null, 'Formidable');
+    const o = await store.getOeuvre(profil, id);
+    expect(o.note).toBeNull();
+    expect(o.commentaire).toBe('Formidable');   // le texte, lui, reste
+  });
+
+  it('un commentaire vide vaut « pas de commentaire », pas une chaine vide', async () => {
+    await store.setAvis(profil, id, 3, '   ');
+    expect((await store.getOeuvre(profil, id)).commentaire).toBeNull();
+  });
+
+  it('l-avis porte sur l-OEUVRE, donc il survit au changement d-edition', async () => {
+    await store.setAvis(profil, id, 5, 'Mon livre préféré.');
+    await store.ajouterEdition(profil, id, resultat({ cleSource: 'gb:poche' }));
+    const editions = await store.getEditions(profil, id);
+    await store.setEditionActive(profil, id, editions.find((e) => e.editionId === 'gb:poche').editionId);
+
+    const [livre] = await store.getBibliotheque(profil);
+    expect(livre.note).toBe(5);
+    expect(livre.commentaire).toBe('Mon livre préféré.');
+  });
+
+  it('L-AVIS SURVIT A LA PROMOTION D-IDENTITE', async () => {
+    /*
+     * Piege reel : `promouvoirIdentite` recopie les colonnes UNE A UNE. Sans
+     * ajout explicite de `commentaire`, l'avis aurait disparu le jour ou Open
+     * Library reconnait enfin le livre — silencieusement.
+     */
+    // Le livre du beforeEach porte deja la cle cible : on l'ecarte, sinon ce
+    // serait une FUSION (ou l'autre gagne, §6) et non une promotion.
+    await store.retirerOeuvre(profil, id);
+
+    const locale = identite({ oeuvreId: 'fp:dune|frank-herbert', resolue: false });
+    const provisoire = await store.ajouterOeuvre(profil, resultat({ cleSource: 'gb:x' }), locale);
+    await store.setAvis(profil, provisoire, 4, 'À relire un jour.');
+
+    await store.promouvoirIdentite(profil, provisoire, 'ol:OL893414W', {});
+
+    const promue = await store.getOeuvre(profil, 'ol:OL893414W');
+    expect(promue.note).toBe(4);
+    expect(promue.commentaire).toBe('À relire un jour.');
+  });
+
+  it('la note apparait dans la bibliotheque, pas seulement dans la fiche', async () => {
+    await store.setAvis(profil, id, 2, 'Bof.');
+    const [livre] = await store.getBibliotheque(profil);
+    expect(livre.note).toBe(2);
+    expect(livre.commentaire).toBe('Bof.');
+  });
+
+  it('REUNIR DEUX LIVRES ne perd pas un commentaire ecrit a la main', async () => {
+    // Le livre absorbe porte un avis, celui qui reste n'en a aucun.
+    const autre = await store.ajouterOeuvre(
+      profil, resultat({ cleSource: 'gb:double' }), identite({ oeuvreId: 'fp:double' }),
+    );
+    await store.setAvis(profil, autre, 5, 'Texte que je ne veux pas perdre.');
+
+    await store.regrouperOeuvres(profil, autre, id);
+
+    const reste = await store.getOeuvre(profil, id);
+    expect(reste.note).toBe(5);
+    expect(reste.commentaire).toBe('Texte que je ne veux pas perdre.');
+  });
+
+  it('mais il n-ECRASE PAS l-avis de celui qu-on garde', async () => {
+    await store.setAvis(profil, id, 2, 'Mon avis à moi.');
+    const autre = await store.ajouterOeuvre(
+      profil, resultat({ cleSource: 'gb:double' }), identite({ oeuvreId: 'fp:double' }),
+    );
+    await store.setAvis(profil, autre, 5, 'Avis du doublon.');
+
+    await store.regrouperOeuvres(profil, autre, id);
+
+    const reste = await store.getOeuvre(profil, id);
+    expect(reste.note).toBe(2);
+    expect(reste.commentaire).toBe('Mon avis à moi.');
+  });
+});

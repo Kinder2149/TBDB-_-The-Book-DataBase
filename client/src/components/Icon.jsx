@@ -25,6 +25,8 @@ const TRACES = {
   // Cadre, soleil, et la ligne d'horizon en montagne : le pictogramme
   // d'image le plus universel, au meme trait que les autres.
   image: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M8.5 9.5h.01',
+  // Etoile a cinq branches, tracee d'un seul trait pour rester nette a 26 px.
+  etoile: 'M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8L3.5 9.7l5.9-.9z',
 };
 
 export default function Icon({ name, size = 22, className = '' }) {

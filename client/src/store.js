@@ -79,6 +79,7 @@ SELECT o.oeuvre_id        AS oeuvreId,
        o.cycle_manuel     AS cycleManuel,
        o.statut           AS statut,
        o.note             AS note,
+       o.commentaire      AS commentaire,
        o.position         AS position,
        o.edition_active   AS editionActive,
        o.ajoute_le        AS ajouteLe,
@@ -195,6 +196,20 @@ export function setCouverture(profileId, oeuvreId, url) {
   return run(
     'UPDATE oeuvres SET couverture_url = ? WHERE profile_id = ? AND oeuvre_id = ?;',
     [url || null, profileId, oeuvreId],
+  );
+}
+
+/*
+ * MON AVIS : la note et le commentaire ensemble, en une seule ecriture.
+ * Les deux se saisissent au meme endroit et se pensent ensemble — deux
+ * ecritures separees feraient clignoter la fiche deux fois pour rien.
+ * `null` efface : on a le droit de retirer une note qu'on regrette.
+ */
+export function setAvis(profileId, oeuvreId, note, commentaire) {
+  const texte = String(commentaire || '').trim();
+  return run(
+    'UPDATE oeuvres SET note = ?, commentaire = ? WHERE profile_id = ? AND oeuvre_id = ?;',
+    [note === null || note === undefined ? null : Number(note), texte || null, profileId, oeuvreId],
   );
 }
 
@@ -384,14 +399,14 @@ export async function promouvoirIdentite(profileId, ancienneCle, nouvelleCle, co
       sql: `INSERT INTO oeuvres
               (profile_id, oeuvre_id, titre, auteurs, annee, date_publication,
                couverture_url, resume, categories, langue, cycle_nom, cycle_tome,
-               cycle_manuel, statut, note, position, edition_active, ajoute_le,
-               commence_le, termine_le)
+               cycle_manuel, statut, note, commentaire, position, edition_active,
+               ajoute_le, commence_le, termine_le)
             SELECT profile_id, ?, titre, auteurs, annee, date_publication,
                    couverture_url, resume, categories, langue,
                    CASE WHEN cycle_manuel = 1 THEN cycle_nom ELSE COALESCE(?, cycle_nom) END,
                    CASE WHEN cycle_manuel = 1 THEN cycle_tome ELSE COALESCE(?, cycle_tome) END,
-                   cycle_manuel, statut, note, position, edition_active, ajoute_le,
-                   commence_le, termine_le
+                   cycle_manuel, statut, note, commentaire, position, edition_active,
+                   ajoute_le, commence_le, termine_le
             FROM oeuvres WHERE profile_id = ? AND oeuvre_id = ?;`,
       params: [nouvelleCle, complements.cycleNom || null, complements.cycleTome || null,
                profileId, ancienneCle],
@@ -579,6 +594,24 @@ export async function regrouperOeuvres(profileId, sourceId, cibleId) {
             FROM liste_items WHERE profile_id = ? AND oeuvre_id = ?;`,
       params: [cibleId, profileId, sourceId],
     },
+    /*
+     * L'AVIS NE SE PERD PAS DANS UNE FUSION (ajoute avec la migration 3).
+     * §6 dit « c'est l'autre qui gagne », et cela reste vrai pour le statut et
+     * la progression. Mais un COMMENTAIRE est un texte ecrit a la main : le
+     * supprimer en silence parce qu'on range deux doublons serait la pire
+     * chose qu'on puisse faire ici.
+     * On ne l'impose donc jamais — on ne le recupere que si la cible n'a
+     * RIEN : pas de note et pas de commentaire. Sinon, celui de la cible reste.
+     */
+    {
+      sql: `UPDATE oeuvres
+            SET note = COALESCE(note, (SELECT note FROM oeuvres
+                                       WHERE profile_id = ? AND oeuvre_id = ?)),
+                commentaire = COALESCE(commentaire, (SELECT commentaire FROM oeuvres
+                                                     WHERE profile_id = ? AND oeuvre_id = ?))
+            WHERE profile_id = ? AND oeuvre_id = ?;`,
+      params: [profileId, sourceId, profileId, sourceId, profileId, cibleId],
+    },
     { sql: 'DELETE FROM oeuvres WHERE profile_id = ? AND oeuvre_id = ?;', params: [profileId, sourceId] },
     {
       // La cible garde son édition active si elle en avait une.
@@ -751,14 +784,14 @@ export async function importerProfil(profil, donnees) {
       sql: `INSERT OR REPLACE INTO oeuvres
               (profile_id, oeuvre_id, titre, auteurs, annee, date_publication,
                couverture_url, resume, categories, langue, cycle_nom, cycle_tome,
-               cycle_manuel, statut, note, position, edition_active, ajoute_le,
-               commence_le, termine_le)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+               cycle_manuel, statut, note, commentaire, position, edition_active,
+               ajoute_le, commence_le, termine_le)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       params: [
         profil.id, o.oeuvreId, o.titre, o.auteurs, o.annee, o.datePublication,
         o.couvertureUrl, o.resume, o.categories, o.langue, o.cycleNom, o.cycleTome,
-        o.cycleManuel ? 1 : 0, o.statut, o.note, o.position || 0, o.editionActive,
-        o.ajouteLe, o.commenceLe, o.termineLe,
+        o.cycleManuel ? 1 : 0, o.statut, o.note, o.commentaire || null,
+        o.position || 0, o.editionActive, o.ajouteLe, o.commenceLe, o.termineLe,
       ],
     });
   }

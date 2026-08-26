@@ -115,7 +115,25 @@ CREATE TABLE IF NOT EXISTS sessions_lecture (
  * La v2 est la PREMIÈRE migration réelle du projet : le mécanisme posé au
  * jour 1 est enfin emprunté, sur une base qui contient déjà des données.
  */
-const MIGRATIONS = [SCHEMA, SESSIONS_LECTURE];
+/*
+ * MIGRATION 3 — mon avis sur ce livre (retour d'usage 112 : « j'aimerais pour
+ * chaque livre pouvoir ajouter une note dessus, peu importe l'edition, note et
+ * commentaire associes »).
+ *
+ * La colonne `note` existait DEJA dans le schema d'origine, avec son
+ * `setNote()` dans store.js et api.js — mais aucun ecran ne la proposait : elle
+ * etait inaccessible depuis le premier jour. Seul le commentaire manquait
+ * vraiment.
+ *
+ * Les deux vivent sur l'OEUVRE et non sur l'edition, comme demande : ce qu'on
+ * pense d'un texte ne change pas parce qu'on l'a lu en poche plutot qu'en
+ * grand format.
+ */
+const AVIS = `
+ALTER TABLE oeuvres ADD COLUMN commentaire TEXT;
+`;
+
+const MIGRATIONS = [SCHEMA, SESSIONS_LECTURE, AVIS];
 
 const DB_NAME = 'lecture';
 const IDB_KEY = 'db:lecture';

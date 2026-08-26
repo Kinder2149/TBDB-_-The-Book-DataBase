@@ -213,6 +213,15 @@ export async function setCouverture(oeuvreId, dataUrl) {
   return store.setCouverture(await getActiveProfileId(), oeuvreId, dataUrl);
 }
 
+/*
+ * Mon avis sur ce livre : une note et un commentaire, portes par l'OEUVRE.
+ * Ce qu'on pense d'un texte ne change pas parce qu'on l'a lu en poche plutot
+ * qu'en grand format (retour d'usage 112).
+ */
+export async function setAvis(oeuvreId, note, commentaire) {
+  return store.setAvis(await getActiveProfileId(), oeuvreId, note, commentaire);
+}
+
 export async function setNote(oeuvreId, note) {
   return store.setNote(await getActiveProfileId(), oeuvreId, note);
 }

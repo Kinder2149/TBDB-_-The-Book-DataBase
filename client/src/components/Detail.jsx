@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getEditions, setStatut, setEditionActive, ajouterEdition,
   supprimerEdition, detacherEdition, regrouperOeuvres, retirerOeuvre, rechercher, setCouverture,
-  getEditionsProposees,
+  getEditionsProposees, setAvis,
   ajouterEditionManuelle, getListes, getListesDeLOeuvre, addToListe,
   removeFromListe, createListe,
 } from '../api.js';
@@ -26,6 +26,7 @@ import Modal from './Modal.jsx';
 import Icon from './Icon.jsx';
 import CouvertureDessinee from './CouvertureDessinee.jsx';
 import EditionPicker from './EditionPicker.jsx';
+import Avis from './Avis.jsx';
 import ProgressBar from './ProgressBar.jsx';
 
 export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProgression }) {
@@ -512,6 +513,19 @@ export default function Detail({ oeuvre, bibliotheque, onFerme, onChange, onProg
           <span>J’en suis à…</span>
         </button>
       </div>
+
+      {/*
+        Mon avis, juste apres la progression : on note un livre quand on vient
+        d'avancer dedans ou de le terminer, pas au moment de le ranger.
+      */}
+      <Avis
+        note={oeuvre.note}
+        commentaire={oeuvre.commentaire}
+        onEnregistrer={(note, texte) => agir(
+          () => setAvis(oeuvre.oeuvreId, note, texte),
+          null,
+        )}
+      />
 
 
       {/* Listes personnalisees (tranche 6) : cocher / decocher, creation a la

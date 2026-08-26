@@ -1732,6 +1732,42 @@ photo personnelle).
 
 ---
 
+---
+
+### Tranche 22 — 2026-08-26 : mon avis sur un livre
+
+Demande : *« j'aimerais pour chaque livre pouvoir ajouter une note dessus, peu
+importe l'édition, note et commentaire associés »*.
+
+**Constat en ouvrant le code** : la colonne `note` existait **depuis le premier
+jour**, avec son `setNote()` dans `store.js` **et** dans la façade — mais aucun
+écran ne l'a jamais proposée. Elle était inaccessible. Seul le commentaire
+manquait vraiment (**migration 3**).
+
+Les deux portent sur l'**œuvre** et non sur l'édition, comme demandé : ce qu'on
+pense d'un texte ne change pas parce qu'on l'a lu en poche plutôt qu'en grand
+format.
+
+| # | Point | Détail |
+|---|---|---|
+| 112 | Note et commentaire | Bloc « Mon avis » dans la fiche, après la progression — on note un livre quand on vient d'avancer dedans, pas au moment de le ranger. Cinq étoiles, et **retoucher la même étoile efface la note** : c'est le seul moyen de revenir en arrière |
+| 113 | *(trouvé en écrivant les vérifications)* La **promotion d'identité** recopie les colonnes une à une | Sans ajout explicite de `commentaire`, l'avis aurait disparu **le jour où Open Library reconnaît enfin le livre** — silencieusement. Vérifié |
+| 114 | *(trouvé de même)* **Réunir deux livres** supprimait l'avis de celui qu'on absorbe | §6 dit « c'est l'autre qui gagne », et cela reste vrai pour le statut et la progression. Mais un commentaire est un **texte écrit à la main** : le supprimer en silence est la pire chose qu'on puisse faire. Il est désormais **récupéré si le livre conservé n'a rien** — et n'écrase jamais un avis existant |
+
+**Deux rythmes d'enregistrement, et c'est voulu** : l'étoile s'enregistre **au
+clic** — noter est un geste unique, attendre une validation serait absurde ; le
+commentaire s'enregistre à la sortie du champ **et** par un bouton qui
+n'apparaît que si le texte a changé. Le `onBlur` seul est capricieux sur
+téléphone, et perdre un texte qu'on vient d'écrire est inacceptable.
+
+**Migration vérifiée sur une base existante** : schéma v3, les livres et leurs
+données conservés.
+
+**155 vérifications** (8 cas ajoutés, dont la survie de l'avis à la promotion
+d'identité et à la fusion).
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1747,7 +1783,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **111 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **114 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

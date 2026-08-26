@@ -995,3 +995,34 @@ button { font: inherit; color: inherit; }
   font-size: .74rem;
   color: var(--muted);
 }
+
+/* --- Mon avis : note et commentaire (retour d'usage 112) ------------------ */
+.avis { margin: 1.25rem 0; }
+
+.avis__etoiles {
+  display: flex; align-items: center; gap: .15rem;
+  margin-bottom: .6rem;
+}
+.avis__etoile {
+  padding: .15rem;
+  color: var(--border);
+  background: none; border: none; cursor: pointer;
+  /* La cible tactile fait 40 px : cinq etoiles serrees se ratent sinon. */
+  min-width: 40px; min-height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.avis__etoile.est-pleine { color: #E0A93B; }
+.avis__etoile svg { fill: currentColor; }
+
+.avis__mention {
+  margin-left: .5rem;
+  font-size: .8rem; color: var(--muted);
+}
+
+.avis__texte {
+  width: 100%;
+  min-height: 5.5rem;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+}
