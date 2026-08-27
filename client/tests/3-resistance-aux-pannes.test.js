@@ -164,11 +164,26 @@ describe('Normaliser ce que rend Google', () => {
 
 describe('Garder les recherches sur l-appareil (archive)', () => {
   it('ressert la derniere recherche connue quand Google est totalement en panne', async () => {
-    reseau(ok(reponseGoogle(4)));
+    reseau(() => ok(reponseGoogle(4)));
     let books = await import('../src/books.js');
     const premier = await books.rechercher('dune', 'titre');
     expect(premier.ancien).toBe(false);
     expect(premier.resultats).toHaveLength(4);
+
+    /*
+     * On VIEILLIT l'archive de deux jours. Depuis la correction 118, une
+     * archive de moins de 24 h sert de cache et se donne pour fraiche ; ce
+     * n'est qu'au-dela qu'elle redevient un repli annonce comme « ancien ».
+     */
+    // L'archive s'ecrit sans etre attendue (pour ne pas retarder l'affichage) :
+    // on lui laisse le temps d'exister avant de la vieillir.
+    await new Promise((r) => setTimeout(r, 30));
+    for (const [k, v] of faux) {
+      if (String(k).startsWith('recherche:')) {
+        faux.set(k, { ...v, pose: v.pose - 48 * 60 * 60 * 1000 });
+      }
+    }
+    expect([...faux.keys()].some((k) => String(k).startsWith('recherche:'))).toBe(true);
 
     // Application relancee : la memoire vive repart a zero, l-archive reste.
     vi.resetModules();
@@ -314,5 +329,56 @@ describe('Suggestions : ne pas payer deux fois dans la journee', () => {
     const dejaLa = { empreintes: new Set([books.empreinteOeuvre('Livre 0', ['Auteur 0'])]), isbn: new Set() };
     const s = await books.suggestions(graines, [], dejaLa, 'profil|exclu');
     expect(s.some((r) => r.titre === 'Livre 0')).toBe(false);
+  });
+});
+
+describe('Le cache survit a la fermeture de l-application', () => {
+  /*
+   * Retour d'usage 118 : « je fais une recherche, je quitte, je reprends la
+   * meme recherche, il doit toujours charger ».
+   *
+   * C'etait exact, et c'etait un defaut de conception : le cache memoire meurt
+   * avec l'application, et l'archive — qui contenait pourtant deja les
+   * resultats — n'etait lue QUE dans le `catch`, donc uniquement quand Google
+   * tombait. On rappelait Google alors qu'on avait la reponse sous la main.
+   */
+  it('la meme recherche, apres relance, ne rappelle PAS la source', async () => {
+    reseau(() => ok(reponseGoogle(6)));
+    let books = await import('../src/books.js');
+    const premier = await books.rechercher('dune', 'titre');
+    expect(premier.resultats).toHaveLength(6);
+    const apresPremier = appels.length;
+    expect(apresPremier).toBeGreaterThan(0);
+
+    // L'application est fermee puis relancee : la memoire vive repart a zero,
+    // l'archive sur disque demeure.
+    vi.resetModules();
+    books = await import('../src/books.js');
+
+    const second = await books.rechercher('dune', 'titre');
+    expect(second.resultats).toHaveLength(6);
+    expect(appels).toHaveLength(apresPremier);      // AUCUN appel de plus
+    expect(second.ancien).toBe(false);              // ce ne sont pas des « vieux » resultats
+  });
+
+  it('une recherche DIFFERENTE appelle bien la source', async () => {
+    reseau(() => ok(reponseGoogle(4)));
+    let books = await import('../src/books.js');
+    await books.rechercher('dune', 'titre');
+    const apres = appels.length;
+
+    vi.resetModules();
+    books = await import('../src/books.js');
+    await books.rechercher('germinal', 'titre');
+    expect(appels.length).toBeGreaterThan(apres);
+  });
+
+  it('le mode compte : le meme mot en Titre et en Auteur sont deux recherches', async () => {
+    reseau(() => ok(reponseGoogle(3)));
+    const books = await import('../src/books.js');
+    await books.rechercher('zola', 'titre');
+    const apres = appels.length;
+    await books.rechercher('zola', 'auteur');
+    expect(appels.length).toBeGreaterThan(apres);
   });
 });

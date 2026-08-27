@@ -1833,6 +1833,43 @@ n'était nécessaire, et il aurait été facile de « réparer » ce qui allait 
 
 ---
 
+---
+
+### Tranche 25 — 2026-08-26 : le cache qui ne servait qu'aux pannes
+
+| # | Symptôme | Cause RÉELLE | Correction |
+|---|---|---|---|
+| 118 | « Je fais une recherche, je quitte, je reprends la même recherche, il doit toujours charger » | **Défaut de conception.** Le cache mémoire meurt avec l'application, et l'archive persistante — qui contenait pourtant déjà les résultats — n'était lue **que dans le `catch`**, c'est-à-dire uniquement quand Google tombait. On rappelait Google alors qu'on avait la réponse sous la main | L'archive est lue **avant** l'appel réseau, si elle a moins de **24 h**. Un catalogue de livres ne change pas dans la journée, et chaque appel évité est un appel de moins sur les 1 000 quotidiens |
+| 119 | « Quand je refais la même recherche, le bloc *La série dans l'ordre* ne s'affiche pas, je dois reprendre le même processus » | **Même cause.** La confirmation de série demande la page 2 ; celle-ci repassait par le réseau à chaque fois, avec ses pannes et ses secondes d'attente | Résolu par la correction 118 : la page 2 vient de l'archive, donc le bloc apparaît **immédiatement** |
+
+**Mesuré, sur la même recherche après relance de l'application :**
+
+| | Avant | Après |
+|---|---|---|
+| Appels réseau | 1 | **0** |
+| Temps | 785 ms | **10 ms** |
+| Bloc « La série, dans l'ordre » | absent | **affiché** |
+
+**Distinction posée** : l'archive a désormais **deux rôles**. En dessous de 24 h
+elle est un **cache** et se donne pour fraîche ; entre 24 h et 7 jours elle
+reste un **filet** en cas de panne, annoncé comme « ancien » à l'utilisateur.
+
+**Trois pièges dans les vérifications elles-mêmes**, tous instructifs :
+
+1. Une `Response` ne se lit qu'**une fois**. Réutiliser la même pour plusieurs
+   appels donne « Body has already been read » — il faut en fabriquer une neuve
+   à chaque appel.
+2. Un test devenu **faux par la correction** : il attendait `ancien === true`
+   sur une archive fraîche, qui est désormais servie comme un cache. Il
+   **vieillit** maintenant l'archive de deux jours pour tester le vrai repli.
+3. L'archive s'écrit **sans être attendue** (pour ne pas retarder l'affichage) :
+   la vieillir aussitôt ne trouvait rien. Une respiration de 30 ms, et une
+   assertion qui vérifie que l'archive existe bien avant de la manipuler.
+
+**162 vérifications.**
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1848,7 +1885,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **117 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **119 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

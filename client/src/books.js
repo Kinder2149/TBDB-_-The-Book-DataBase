@@ -112,6 +112,27 @@ export async function rechercher(texte, mode, page = 0) {
     return { resultats: enCache.resultats, ancien: false, pose: enCache.pose };
   }
 
+  /*
+   * L'ARCHIVE SERT DE CACHE, et non plus seulement de filet (correction 118).
+   *
+   * Retour d'usage : « je fais une recherche, je quitte, je reprends la meme
+   * recherche, il doit toujours charger ». C'etait exact et c'etait un defaut
+   * de conception : le cache memoire meurt avec l'application, et l'archive —
+   * qui contenait pourtant deja les resultats — n'etait lue QUE dans le
+   * `catch`, c'est-a-dire uniquement quand Google tombait. On rappelait donc
+   * Google alors qu'on avait la reponse sous la main.
+   *
+   * Vingt-quatre heures : un catalogue de livres ne change pas dans la
+   * journee, et chaque appel evite est un appel de moins sur les 1 000
+   * quotidiens. Au-dela, on redemande — l'archive de sept jours reste
+   * disponible en cas de panne, plus bas.
+   */
+  const recente = await lireArchive(cle, ARCHIVE_FRAICHE_MS);
+  if (recente) {
+    cacheRecherche.set(cle, { pose: recente.pose, resultats: recente.resultats });
+    return { resultats: recente.resultats, ancien: false, pose: recente.pose };
+  }
+
   let resultats;
   try {
     resultats = await interroger(requete, mode, page);
@@ -246,13 +267,20 @@ async function interroger(requete, mode, page = 0) {
  * reste un bon resultat pour un catalogue de livres.
  */
 const ARCHIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/*
+ * Duree pendant laquelle une archive est servie SANS rappeler la source. Au
+ * dela, elle reste utilisable en cas de panne (jusqu'a ARCHIVE_TTL_MS), mais
+ * on prefere redemander.
+ */
+const ARCHIVE_FRAICHE_MS = 24 * 60 * 60 * 1000;
 const PREFIXE_ARCHIVE = 'recherche:';
 
-async function lireArchive(cle) {
+async function lireArchive(cle, duree = ARCHIVE_TTL_MS) {
   try {
     const { get } = await import('idb-keyval');
     const entree = await get(PREFIXE_ARCHIVE + cle);
-    if (!entree || Date.now() - entree.pose > ARCHIVE_TTL_MS) return null;
+    if (!entree || Date.now() - entree.pose > duree) return null;
     return entree;
   } catch {
     return null;   // IndexedDB indisponible : on n'a simplement pas de filet
