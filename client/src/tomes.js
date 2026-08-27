@@ -118,3 +118,46 @@ export function serieAConfirmer(resultats) {
   const n = nombreDeTomes(resultats);
   return n === 2;
 }
+
+/*
+ * TRIER DES RESULTATS DE RECHERCHE (retour d'usage 120 : « j'aimerais pouvoir
+ * trier par pertinence ou date de sortie »).
+ *
+ * Le tri se fait ICI, dans l'application, et non chez Google : mesure du
+ * 2026-08-26, `orderBy=newest` rend EXACTEMENT le meme ordre que par defaut —
+ * memes titres, memes annees. Google ignore la consigne. Comme on a deja
+ * l'annee de chaque livre, trier soi-meme est instantane et fiable.
+ */
+export const TRIS = [
+  { cle: 'pertinence', libelle: 'Pertinence' },
+  { cle: 'recent', libelle: 'Plus récent' },
+];
+
+/** Annee comparable d'un resultat, ou 0 s'il n'en a pas. */
+function anneeDe(r) {
+  const brut = r.datePublication || r.annee || '';
+  const m = String(brut).match(/(\d{4})/);
+  return m ? Number(m[1]) : 0;
+}
+
+/**
+ * Trie une liste de resultats. « pertinence » rend l'ordre d'origine — celui
+ * de la source, qui reste le meilleur pour trouver un titre precis.
+ *
+ * Les livres SANS DATE vont a la fin et non au debut : un livre non date n'est
+ * pas un livre ancien, et le placer en tete d'un tri « plus recent » serait
+ * trompeur.
+ */
+export function trierResultats(resultats, tri) {
+  const liste = [...(resultats || [])];
+  if (tri !== 'recent') return liste;
+
+  return liste.sort((a, b) => {
+    const an = anneeDe(a);
+    const bn = anneeDe(b);
+    if (an === 0 && bn === 0) return 0;
+    if (an === 0) return 1;
+    if (bn === 0) return -1;
+    return bn - an;
+  });
+}

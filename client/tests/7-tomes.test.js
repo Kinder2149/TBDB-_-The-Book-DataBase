@@ -7,7 +7,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { numeroDeTome, separerLesTomes, nombreDeTomes, serieAConfirmer } from '../src/tomes.js';
+import {
+  numeroDeTome, separerLesTomes, nombreDeTomes, serieAConfirmer, trierResultats,
+} from '../src/tomes.js';
 
 describe('Lire un numero de tome dans un titre', () => {
   it('reconnait les formes francaises', () => {
@@ -119,5 +121,48 @@ describe('Reperer une serie PRESSENTIE, pour la confirmer tout de suite', () => 
   it('ZERO ou UN tome : rien a confirmer, ce n-est pas une serie', () => {
     expect(serieAConfirmer([r('Germinal'), r('Nana')])).toBe(false);
     expect(serieAConfirmer([r('S tome 1'), r('Germinal')])).toBe(false);
+  });
+});
+
+describe('Trier les resultats', () => {
+  /*
+   * Retour d'usage 120. Le tri se fait dans l'application : mesure du
+   * 2026-08-26, `orderBy=newest` chez Google rend EXACTEMENT le meme ordre
+   * que par defaut — memes titres, memes annees. Il ignore la consigne.
+   */
+  const l = (titre, date) => ({ cleSource: titre, titre, datePublication: date, annee: date });
+
+  it('« pertinence » ne touche a rien : c-est l-ordre de la source', () => {
+    const liste = [l('A', '1990'), l('B', '2020'), l('C', '2005')];
+    expect(trierResultats(liste, 'pertinence').map((x) => x.titre)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('« plus recent » met les editions actuelles en tete', () => {
+    const liste = [l('A', '1990'), l('B', '2020'), l('C', '2005')];
+    expect(trierResultats(liste, 'recent').map((x) => x.titre)).toEqual(['B', 'C', 'A']);
+  });
+
+  it('les livres SANS DATE vont a la fin, jamais en tete', () => {
+    // Un livre non date n'est pas un livre recent : le mettre en premier
+    // d'un tri « plus recent » serait trompeur.
+    const liste = [l('sans date', null), l('recent', '2024'), l('vieux', '1950')];
+    expect(trierResultats(liste, 'recent').map((x) => x.titre))
+      .toEqual(['recent', 'vieux', 'sans date']);
+  });
+
+  it('lit l-annee dans une date complete', () => {
+    const liste = [l('A', '1990-03-14'), l('B', '2020-01-02')];
+    expect(trierResultats(liste, 'recent')[0].titre).toBe('B');
+  });
+
+  it('NE MODIFIE PAS la liste d-origine', () => {
+    const liste = [l('A', '1990'), l('B', '2020')];
+    trierResultats(liste, 'recent');
+    expect(liste.map((x) => x.titre)).toEqual(['A', 'B']);
+  });
+
+  it('supporte une liste vide', () => {
+    expect(trierResultats([], 'recent')).toEqual([]);
+    expect(trierResultats(null, 'recent')).toEqual([]);
   });
 });

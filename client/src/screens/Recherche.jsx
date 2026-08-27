@@ -16,7 +16,7 @@ import {
 } from '../api.js';
 import { LIBELLES, STATUTS, classeStatut, ageLisible } from '../status.js';
 import { grouperParAuteur } from '../auteurs.js';
-import { separerLesTomes, serieAConfirmer } from '../tomes.js';
+import { separerLesTomes, serieAConfirmer, trierResultats, TRIS } from '../tomes.js';
 import { notify } from '../notify.js';
 import SearchBar from '../components/SearchBar.jsx';
 import BookCard from '../components/BookCard.jsx';
@@ -47,6 +47,7 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
   const [derniereRequete, setDerniereRequete] = useState('');
   // Livre sur lequel on vient de faire un appui long, pour choisir sa categorie.
   const [categorieCible, setCategorieCible] = useState(null);
+  const [tri, setTri] = useState('pertinence');
   const [page, setPage] = useState(0);            // page de resultats deja chargee
   const [encoreDesResultats, setEncoreDesResultats] = useState(false);
   const [chargeSuite, setChargeSuite] = useState(false);
@@ -79,11 +80,18 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
    * remettre dans l'ordre est ce qui rend une saga visible.
    * Jamais en mode Auteur, ou le regroupement par ecrivain prime.
    */
+  /*
+   * Le tri s'applique AVANT le regroupement : les « autres resultats » suivent
+   * donc l'ordre choisi, tandis que les TOMES gardent le leur — un tome 3 doit
+   * rester entre le 2 et le 4, c'est toute la raison d'etre de ce bloc.
+   */
+  const triees = useMemo(() => trierResultats(resultats, tri), [resultats, tri]);
+
   const serie = useMemo(
-    () => (mode !== 'auteur' && resultats.length > 0
-      ? separerLesTomes(resultats)
-      : { tomes: [], autres: resultats }),
-    [mode, resultats],
+    () => (mode !== 'auteur' && triees.length > 0
+      ? separerLesTomes(triees)
+      : { tomes: [], autres: triees }),
+    [mode, triees],
   );
 
   const groupes = useMemo(
@@ -124,6 +132,7 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
     setEtat('vide');
     setMessageErreur(null);
     setPoseArchive(null);
+    setTri('pertinence');
   }, []);
 
   const lancer = useCallback(async (texte, modeCourant) => {
@@ -536,6 +545,29 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
         </div>
       )}
 
+      {/*
+        Le tri (retour d'usage 120). Il ne s'affiche que s'il y a de quoi
+        trier — sur trois resultats, un selecteur occupe plus de place qu'il
+        n'en fait gagner.
+        Il vit dans l'application et non chez Google : mesure du 2026-08-26,
+        `orderBy=newest` rend exactement le meme ordre que par defaut.
+      */}
+      {resultats.length > 3 && etat === 'fait' && (
+        <div className="seg seg--tri" role="group" aria-label="Trier les résultats">
+          {TRIS.map((t) => (
+            <button
+              key={t.cle}
+              type="button"
+              className={`seg__item${tri === t.cle ? ' on' : ''}`}
+              onClick={() => setTri(t.cle)}
+              aria-pressed={tri === t.cle}
+            >
+              {t.libelle}
+            </button>
+          ))}
+        </div>
+      )}
+
       {poseArchive ? (
         <p className="hint hint--archive">
           <Icon name="alerte" size={16} />
@@ -588,7 +620,7 @@ export default function Recherche({ editionsSuivies, onSuivre, onChangement }) {
           )}
         </>
       ) : resultats.length > 0 ? (
-        <div className="grille">{resultats.map((r) => carteResultat(r))}</div>
+        <div className="grille">{triees.map((r) => carteResultat(r))}</div>
       ) : null}
 
       {chargeSuite && <p className="hint">Encore quelques livres…</p>}

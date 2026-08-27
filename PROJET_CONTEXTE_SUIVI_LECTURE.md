@@ -1870,6 +1870,46 @@ reste un **filet** en cas de panne, annoncé comme « ancien » à l'utilisateur
 
 ---
 
+---
+
+### Tranche 26 — 2026-08-26 : le tri, enfin
+
+| # | Demande | Détail |
+|---|---|---|
+| 120 | « J'aimerais pouvoir trier par pertinence ou date de sortie » | Sélecteur **Pertinence / Plus récent** au-dessus des résultats, affiché seulement au-delà de 3 livres — en dessous, il occuperait plus de place qu'il n'en ferait gagner |
+
+**Le tri vit dans l'application, pas chez Google** : mesuré le 2026-08-26,
+`orderBy=newest` rend **exactement le même ordre** que par défaut, mêmes titres
+et mêmes années. Google ignore la consigne. Comme l'année de chaque livre est
+déjà là, trier soi-même est instantané et fiable.
+
+**Deux règles posées :**
+
+- Le tri s'applique **avant** le regroupement en série. Les « autres
+  résultats » suivent donc l'ordre choisi, tandis que **les tomes gardent le
+  leur** — un tome 3 doit rester entre le 2 et le 4, c'est toute la raison
+  d'être de ce bloc.
+- Les livres **sans date vont à la fin**, jamais en tête. Un livre non daté
+  n'est pas un livre récent, et le placer en premier d'un tri « plus récent »
+  serait trompeur.
+
+**Vérifié à l'écran**, sur « game of thrones » :
+
+```
+Pertinence   2019 2017 2024 2021 2025 2017 2003 2020
+Plus récent  2025 2025 2024 2024 2021 2020 2019 2019
+```
+
+*Note de méthode* : ce tri avait été écarté deux tranches plus tôt, Kinder
+n'ayant retenu que « Pertinence » dans une question à choix multiple — alors
+que sa demande initiale mentionnait la date. Le point lui a été **signalé**
+plutôt que classé, et il l'a confirmé. Une réponse à une question fermée ne
+remplace pas toujours une demande écrite.
+
+**168 vérifications.**
+
+---
+
 **Le cycle ouvert par la tranche 8 est refermé.** Les cinq causes du symptôme
 initial — « Google Books n'est pas disponible, et c'est lent » — ont été
 traitées : réessais (8), budgets de la fiche (9), archive hors ligne (10),
@@ -1885,7 +1925,7 @@ Côté `store.js` : `promouvoirIdentite()` et `creerOeuvreManuelle()`.
 
 ## 13. Comment lire ce document
 
-Il a été écrit avant la première ligne de code, puis corrigé **119 fois** au fil
+Il a été écrit avant la première ligne de code, puis corrigé **120 fois** au fil
 de l'exécution. Les corrections ne sont pas des repentirs : ce sont des
 décisions que seule la confrontation au réel pouvait trancher.
 

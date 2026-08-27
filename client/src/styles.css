@@ -1053,3 +1053,8 @@ button { font: inherit; color: inherit; }
 .edition__vignette .carte-livre__dessinee { padding: .2rem; gap: .1rem; }
 .edition__vignette .carte-livre__dessinee-titre { font-size: .38rem; -webkit-line-clamp: 4; }
 .edition__vignette .carte-livre__dessinee-auteur { display: none; }
+
+/* Le selecteur de tri : plus discret que le mode de recherche, qui reste
+   l'action principale de l'ecran. */
+.seg--tri { margin-bottom: .75rem; }
+.seg--tri .seg__item { font-size: .82rem; padding: .35rem .5rem; }
